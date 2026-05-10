@@ -8,6 +8,10 @@
   --blank-border: #4a4538;
   --revealed: #a3c982;
   --hint: #e3c889;
+  --border: #3a352b;
+  --btn-secondary-bg: #2e2b24;
+  --btn-secondary-fg: var(--fg);
+  --panel-bg: rgba(255,255,255,0.02);
 
   --font-ui:      -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --font-reading: 'Iowan Old Style', Charter, 'Source Serif Pro', Cambria, Georgia, serif;
@@ -37,7 +41,7 @@ header {
   top: 0;
   background: var(--bg);
   padding: 0.5rem 0;
-  border-bottom: 1px solid #333;
+  border-bottom: 1px solid var(--border);
   margin-bottom: 1rem;
   display: flex;
   flex-wrap: wrap;
@@ -48,7 +52,7 @@ header {
 header .home {
   font-weight: 600;
   padding: 0.3rem 0.6rem;
-  border: 1px solid #333;
+  border: 1px solid var(--border);
   border-radius: 4px;
 }
 label { display: flex; align-items: center; gap: 0.5rem; }
@@ -64,7 +68,7 @@ button {
   font-family: inherit;
 }
 button:hover { filter: brightness(1.1); }
-button.secondary { background: #333; color: var(--fg); }
+button.secondary { background: var(--btn-secondary-bg); color: var(--btn-secondary-fg); border: 1px solid var(--border); }
 .stats { color: var(--muted); font-size: 0.85rem; margin-left: auto; }
 
 .word { display: inline; }
@@ -229,7 +233,7 @@ button.secondary { background: #333; color: var(--fg); }
   color: var(--muted);
   font-size: 0.95rem;
   padding: 0.3rem 0.6rem;
-  border: 1px solid #333;
+  border: 1px solid var(--border);
   border-radius: 4px;
   max-width: 300px;
   white-space: nowrap;
@@ -264,9 +268,9 @@ body.theme-dark {
 .opts {
   max-width: 900px;
   margin: 1rem auto;
-  border: 1px solid #2e2a22;
+  border: 1px solid var(--border);
   border-radius: 8px;
-  background: rgba(255,255,255,0.02);
+  background: var(--panel-bg);
 }
 .opts summary {
   cursor: pointer;
@@ -284,7 +288,7 @@ body.theme-dark {
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 0.7rem 1.2rem;
   padding: 0.6rem 1rem 1rem;
-  border-top: 1px solid #2e2a22;
+  border-top: 1px solid var(--border);
 }
 .opt-grid label {
   display: grid;
@@ -300,7 +304,7 @@ body.theme-dark {
 .opt-grid select, .opt-grid input[type=text] {
   background: var(--bg);
   color: var(--fg);
-  border: 1px solid #3a352b;
+  border: 1px solid var(--border);
   border-radius: 4px;
   padding: 0.3rem 0.5rem;
   font-family: inherit;
