@@ -1,5 +1,4 @@
-debug-clipboard.png
-debug-clipboard.txt
+debug/
 .DS_Store
 Thumbs.db
 node_modules/
