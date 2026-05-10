@@ -5,7 +5,8 @@
 <title>Spread blanking — Memorize</title>
 <link rel="stylesheet" href="style.css">
 <style>
-  #text { font-size: 1.15rem; line-height: 1.9; white-space: pre-wrap; max-width: 760px; margin: 0 auto; }
+  #text { font-size: 1.15rem; line-height: 1.9; max-width: 760px; margin: 0 auto; }
+  #text .line { padding: 0; }
 </style>
 </head>
 <body>
@@ -17,6 +18,11 @@
   <button id="reshuffle">Reshuffle</button>
   <button id="revealAll" class="secondary">Reveal all</button>
   <button id="hideAll" class="secondary">Hide all</button>
+  <span class="pager" id="pager" hidden>
+    <button id="prevPage" class="secondary">◄</button>
+    <span class="page-info" id="pageInfo"></span>
+    <button id="nextPage" class="secondary">►</button>
+  </span>
   <span class="stats" id="stats"></span>
 </header>
 
@@ -24,15 +30,23 @@
 
 <script src="data.js"></script>
 <script>
+const activeText = getActiveText();
+document.getElementById('textTitle').textContent = activeText.title;
+document.title = activeText.title + ' — Spread';
+
 const textEl = document.getElementById('text');
 const pctEl = document.getElementById('pct');
 const pctVal = document.getElementById('pctVal');
 const stats = document.getElementById('stats');
+const pagerEl = document.getElementById('pager');
+const pageInfoEl = document.getElementById('pageInfo');
 
-const activeText = getActiveText();
-document.getElementById('textTitle').textContent = activeText.title;
-document.title = activeText.title + ' — Spread';
 const { tokens, lineMap } = tokenize(activeText.body);
+const bodyLines = activeText.body.split('\n');
+const pages = paginate(bodyLines, 800);
+let currentPage = 0;
+const paginated = pages.length > 1;
+pagerEl.hidden = !paginated;
 
 function applyBlanks(pct) {
   const blankSet = pickBlanksPerLine(tokens, lineMap, pct);
@@ -46,38 +60,61 @@ function applyBlanks(pct) {
 
 function render() {
   textEl.innerHTML = '';
-  let blankCount = 0, revealedCount = 0;
-  tokens.forEach((t, i) => {
-    if (t.type === 'break') {
-      textEl.appendChild(document.createElement('br'));
-      const sp = document.createElement('span');
-      sp.className = 'stanza-break';
-      textEl.appendChild(sp);
-    } else if (t.type === 'newline') {
-      textEl.appendChild(document.createElement('br'));
-    } else if (t.type === 'space') {
-      textEl.appendChild(document.createTextNode(t.text));
-    } else if (t.type === 'token') {
-      if (t.blanked) {
-        blankCount++;
-        const span = document.createElement('span');
-        span.className = 'blank' + (t.revealed ? ' revealed' : '');
-        span.textContent = t.text;
-        span.addEventListener('click', () => {
-          tokens[i].revealed = !tokens[i].revealed;
-          render();
-        });
-        textEl.appendChild(span);
-        if (t.revealed) revealedCount++;
-      } else {
-        const span = document.createElement('span');
-        span.className = 'word';
-        span.textContent = t.text;
-        textEl.appendChild(span);
+  let lineMapIdx = 0;
+  const page = pages[currentPage];
+
+  for (let i = 0; i < bodyLines.length; i++) {
+    const raw = bodyLines[i];
+    const inPage = i >= page.start && i <= page.end;
+    if (raw.trim() === '') {
+      if (inPage) {
+        const sp = document.createElement('div');
+        sp.className = 'stanza-break';
+        textEl.appendChild(sp);
       }
+      continue;
     }
+    const lineIdxs = lineMap[lineMapIdx++];
+    if (!inPage) continue;
+
+    const lineDiv = document.createElement('div');
+    lineDiv.className = 'line';
+    lineIdxs.forEach(idx => {
+      const t = tokens[idx];
+      if (t.type === 'space') {
+        lineDiv.appendChild(document.createTextNode(t.text));
+      } else if (t.type === 'token') {
+        if (t.blanked) {
+          const span = document.createElement('span');
+          span.className = 'blank' + (t.revealed ? ' revealed' : '');
+          span.textContent = t.text;
+          span.addEventListener('click', () => {
+            tokens[idx].revealed = !tokens[idx].revealed;
+            render();
+          });
+          lineDiv.appendChild(span);
+        } else {
+          const span = document.createElement('span');
+          span.className = 'word';
+          span.textContent = t.text;
+          lineDiv.appendChild(span);
+        }
+      }
+    });
+    textEl.appendChild(lineDiv);
+  }
+
+  // Stats reflect totals across the full text, not just the page.
+  let blankCount = 0, revealedCount = 0;
+  tokens.forEach(t => {
+    if (t.blanked) { blankCount++; if (t.revealed) revealedCount++; }
   });
   stats.textContent = `${revealedCount}/${blankCount} revealed`;
+
+  if (paginated) {
+    pageInfoEl.textContent = `Page ${currentPage + 1} / ${pages.length}`;
+  }
+  window.scrollTo(0, 0);
 }
 
 function update() {
@@ -97,6 +134,18 @@ document.getElementById('revealAll').addEventListener('click', () => {
 document.getElementById('hideAll').addEventListener('click', () => {
   tokens.forEach(t => { if (t.blanked) t.revealed = false; });
   render();
+});
+
+document.getElementById('prevPage').addEventListener('click', () => {
+  if (currentPage > 0) { currentPage--; render(); }
+});
+document.getElementById('nextPage').addEventListener('click', () => {
+  if (currentPage < pages.length - 1) { currentPage++; render(); }
+});
+window.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT' || !paginated) return;
+  if (e.key === 'ArrowLeft' && currentPage > 0) { currentPage--; render(); }
+  else if (e.key === 'ArrowRight' && currentPage < pages.length - 1) { currentPage++; render(); }
 });
 
 update();

@@ -87,6 +87,24 @@ button.secondary { background: #333; color: var(--fg); }
 }
 .stanza-break { display: block; height: 0.5rem; }
 
+/* Lazy rendering: browser skips layout/paint for off-screen lines.
+   Massive perf win on long texts (Hobbit-sized). */
+.line {
+  display: block;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 1.8em;
+}
+
+/* Pagination */
+.pager {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+.pager .page-info { min-width: 7em; text-align: center; }
+
 /* menu */
 .menu {
   max-width: 760px;

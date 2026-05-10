@@ -283,3 +283,35 @@ function countWords(body) {
 function countLines(body) {
   return body.split('\n').filter(l => l.trim() !== '').length;
 }
+
+// Paginate raw body lines into pages of ~targetWords each. Prefers breaking
+// on blank-line paragraph boundaries. Returns [{ start, end }] inclusive
+// line indices into the bodyLines array.
+function paginate(bodyLines, targetWords = 800) {
+  const pages = [];
+  let start = 0;
+  let words = 0;
+  for (let i = 0; i < bodyLines.length; i++) {
+    words += (bodyLines[i].match(/\p{L}+/gu) || []).length;
+    const isBreak = bodyLines[i].trim() === '';
+    if (words >= targetWords && (isBreak || i === bodyLines.length - 1)) {
+      pages.push({ start, end: i });
+      start = i + 1;
+      words = 0;
+    }
+  }
+  if (start < bodyLines.length) {
+    if (pages.length) {
+      const tail = bodyLines.slice(start).join(' ').match(/\p{L}+/gu);
+      const tailWords = tail ? tail.length : 0;
+      if (tailWords < targetWords / 4) {
+        pages[pages.length - 1].end = bodyLines.length - 1;
+      } else {
+        pages.push({ start, end: bodyLines.length - 1 });
+      }
+    } else {
+      pages.push({ start, end: bodyLines.length - 1 });
+    }
+  }
+  return pages.length ? pages : [{ start: 0, end: bodyLines.length - 1 }];
+}

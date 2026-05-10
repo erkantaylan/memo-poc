@@ -33,6 +33,11 @@
 <header>
   <a class="home" href="index.html">← Home</a>
   <span class="text-title" id="textTitle"></span>
+  <span class="pager" id="pager" hidden>
+    <button id="prevPage" class="secondary">◄</button>
+    <span class="page-info" id="pageInfo"></span>
+    <button id="nextPage" class="secondary">►</button>
+  </span>
   <span class="stats" id="stats"></span>
 </header>
 
@@ -183,9 +188,24 @@ function bionicWord(tok, pct) {
 }
 
 let cachedBody = activeText.body;
+let bodyLines = cachedBody.split('\n');
+let pages = paginate(bodyLines, 800);
+let currentPage = 0;
+const pagerEl = document.getElementById('pager');
+const pageInfoEl = document.getElementById('pageInfo');
+
+function updatePager() {
+  const paginated = pages.length > 1;
+  pagerEl.hidden = !paginated;
+  if (paginated) pageInfoEl.textContent = `Page ${currentPage + 1} / ${pages.length}`;
+}
+
 function refreshBody() {
-  // re-resolve body if strip-md toggled (getActiveText reads pref each time)
   cachedBody = getActiveText().body;
+  bodyLines = cachedBody.split('\n');
+  pages = paginate(bodyLines, 800);
+  currentPage = Math.min(currentPage, pages.length - 1);
+  updatePager();
 }
 
 function render() {
@@ -211,21 +231,29 @@ function render() {
   textEl.style.wordSpacing  = ws + 'em';
   textEl.style.maxWidth     = width + 'px';
 
-  let wordCount = 0;
-  const lines = cachedBody.split('\n');
-  const html = lines.map(line => {
-    if (line.trim() === '') return '<span class="stanza-break"></span>';
+  let wordCount = 0, totalWords = 0;
+  const page = pages[currentPage];
+  const html = bodyLines.map((line, i) => {
+    const inPage = i >= page.start && i <= page.end;
+    const lineWords = (line.match(/\p{L}+/gu) || []).length;
+    totalWords += lineWords;
+    if (!inPage) return '';
+    if (line.trim() === '') return '<div class="stanza-break"></div>';
     const parts = line.split(/(\s+)/);
-    return parts.map(p => {
+    const inner = parts.map(p => {
       if (/^\s+$/.test(p)) return escapeHtml(p);
       if (!LETTER.test(p)) return `<span class="punct">${escapeHtml(p)}</span>`;
       wordCount++;
       return bionicWord(p, pct);
     }).join('');
-  }).join('\n');
+    return `<div class="line">${inner}</div>`;
+  }).join('');
 
   textEl.innerHTML = html;
-  stats.textContent = `${wordCount} words`;
+  stats.textContent = pages.length > 1
+    ? `${wordCount} of ${totalWords} words (page)`
+    : `${totalWords} words`;
+  window.scrollTo(0, 0);
 }
 
 // Wire up changes
@@ -253,6 +281,20 @@ els.stripMd.addEventListener('change', () => {
   render();
 });
 
+document.getElementById('prevPage').addEventListener('click', () => {
+  if (currentPage > 0) { currentPage--; updatePager(); render(); }
+});
+document.getElementById('nextPage').addEventListener('click', () => {
+  if (currentPage < pages.length - 1) { currentPage++; updatePager(); render(); }
+});
+window.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  if (pages.length <= 1) return;
+  if (e.key === 'ArrowLeft' && currentPage > 0) { currentPage--; updatePager(); render(); }
+  else if (e.key === 'ArrowRight' && currentPage < pages.length - 1) { currentPage++; updatePager(); render(); }
+});
+
+updatePager();
 render();
 </script>
 </body>
