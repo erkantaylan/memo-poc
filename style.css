@@ -12,6 +12,9 @@
   --btn-secondary-bg: #2e2b24;
   --btn-secondary-fg: var(--fg);
   --panel-bg: rgba(255,255,255,0.02);
+  --card-bg: #221f1a;
+  --card-inner-bg: #2a2620;
+  --input-bg: #16140f;
 
   --font-ui:      -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --font-reading: 'Iowan Old Style', Charter, 'Source Serif Pro', Cambria, Georgia, serif;
@@ -119,10 +122,10 @@ button.secondary { background: var(--btn-secondary-bg); color: var(--btn-seconda
 
 .text-card {
   padding: 1.1rem 1.3rem;
-  border: 1px solid #2e2e2e;
+  border: 1px solid var(--border);
   border-radius: 8px;
   margin-bottom: 0.8rem;
-  background: #202020;
+  background: var(--card-bg);
   position: relative;
 }
 .text-card h3 { margin: 0 0 0.25rem 0; color: var(--fg); font-weight: 500; }
@@ -135,16 +138,16 @@ button.secondary { background: var(--btn-secondary-bg); color: var(--btn-seconda
 }
 .text-card .modes a {
   display: block;
-  background: #2a2a2a;
+  background: var(--card-inner-bg);
   padding: 0.8rem 1rem;
   border-radius: 6px;
   color: var(--fg);
-  border: 1px solid #333;
+  border: 1px solid var(--border);
   transition: border-color 0.15s, background 0.15s, transform 0.08s;
 }
 .text-card .modes a:hover {
   border-color: var(--accent);
-  background: #2f2f2f;
+  filter: brightness(1.08);
   transform: translateY(-1px);
 }
 .mode-head {
@@ -191,16 +194,16 @@ button.secondary { background: var(--btn-secondary-bg); color: var(--btn-seconda
 #addForm {
   margin-top: 0.8rem;
   padding: 1rem;
-  border: 1px solid #2e2e2e;
+  border: 1px solid var(--border);
   border-radius: 8px;
-  background: #1d1d1d;
+  background: var(--card-bg);
 }
 #addForm input, #addForm textarea {
   display: block;
   width: 100%;
-  background: #161616;
+  background: var(--input-bg);
   color: var(--fg);
-  border: 1px solid #333;
+  border: 1px solid var(--border);
   border-radius: 4px;
   padding: 0.5rem 0.7rem;
   margin-bottom: 0.7rem;
@@ -255,6 +258,9 @@ body.theme-light {
   --btn-secondary-bg: #e2d2af;
   --btn-secondary-fg: var(--fg);
   --panel-bg: rgba(0,0,0,0.03);
+  --card-bg: #ede4ca;
+  --card-inner-bg: #e2d4b1;
+  --input-bg: #fbf6e8;
 }
 body.theme-dark {
   --bg: #161616;
@@ -269,6 +275,9 @@ body.theme-dark {
   --btn-secondary-bg: #2a2a2a;
   --btn-secondary-fg: var(--fg);
   --panel-bg: rgba(255,255,255,0.03);
+  --card-bg: #1f1f1f;
+  --card-inner-bg: #2a2a2a;
+  --input-bg: #121212;
 }
 /* sepia is the default :root palette */
 
