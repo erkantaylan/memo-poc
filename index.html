@@ -75,48 +75,60 @@ cleanBtn.addEventListener('click', () => {
 
 bodyInput.addEventListener('input', updateSizeInfo);
 
-const MODES = [
+const MODE_GROUPS = [
   {
-    label: 'Spread blanking',
-    file: 'spread.html',
-    diff: 'easy',
-    diffLabel: 'Beginner',
-    desc: 'Whole text visible. Hide a % of words. Slider scales difficulty. Best when first learning.'
+    name: 'Memorize',
+    blurb: 'Active recall — practice from least to most demanding.',
+    modes: [
+      {
+        label: 'Spread blanking',
+        file: 'spread.html',
+        diff: 'easy',
+        diffLabel: 'Beginner',
+        desc: 'Whole text visible. Hide a % of words. Slider scales difficulty. Best when first learning.'
+      },
+      {
+        label: 'First letters',
+        file: 'first-letter.html',
+        diff: 'medium',
+        diffLabel: 'Medium',
+        desc: 'Only first letter of each word shown. Recite the rest. Good middle-ground practice.'
+      },
+      {
+        label: 'Focus mode',
+        file: 'focus.html',
+        diff: 'hard',
+        diffLabel: 'Hard',
+        desc: '4 lines, big and centered, all hidden. Free recall — strongest test of memory.'
+      },
+      {
+        label: 'Type it out',
+        file: 'typing.html',
+        diff: 'expert',
+        diffLabel: 'Impossible',
+        desc: 'Type every letter from memory. Production effect — best for verification once you know it.'
+      },
+    ],
   },
   {
-    label: 'First letters',
-    file: 'first-letter.html',
-    diff: 'medium',
-    diffLabel: 'Medium',
-    desc: 'Only first letter of each word shown. Recite the rest. Good middle-ground practice.'
-  },
-  {
-    label: 'Focus mode',
-    file: 'focus.html',
-    diff: 'hard',
-    diffLabel: 'Hard',
-    desc: '4 lines, big and centered, all hidden. Free recall — strongest test of memory.'
-  },
-  {
-    label: 'Type it out',
-    file: 'typing.html',
-    diff: 'expert',
-    diffLabel: 'Impossible',
-    desc: 'Type every letter from memory. Production effect — best for verification once you know it.'
-  },
-  {
-    label: 'RSVP (speed read)',
-    file: 'rsvp.html',
-    diff: 'aid',
-    diffLabel: 'Reading aid',
-    desc: 'Words flash one at a time at a fixed point. Adjustable WPM. Use for fast exposure before memorizing.'
-  },
-  {
-    label: 'Bionic reading',
-    file: 'bionic.html',
-    diff: 'aid',
-    diffLabel: 'Reading aid',
-    desc: 'First half of each word bolded — eye anchors faster. Visual aid for quicker reading.'
+    name: 'Fast read',
+    blurb: 'Reading aids — use for first exposure or comfortable rereads.',
+    modes: [
+      {
+        label: 'RSVP (speed read)',
+        file: 'rsvp.html',
+        diff: 'aid',
+        diffLabel: 'Reading aid',
+        desc: 'Words flash one at a time at a fixed point. Adjustable WPM. Use for fast exposure before memorizing.'
+      },
+      {
+        label: 'Bionic reading',
+        file: 'bionic.html',
+        diff: 'aid',
+        diffLabel: 'Reading aid',
+        desc: 'First half of each word bolded — eye anchors faster. Visual aid for quicker reading.'
+      },
+    ],
   },
 ];
 
@@ -139,21 +151,36 @@ function render() {
     card.querySelector('h3').textContent = t.title;
     card.querySelector('.meta').textContent =
       `${countLines(t.body)} lines · ${countWords(t.body)} words`;
-    const modesDiv = card.querySelector('.modes');
-    MODES.forEach(m => {
-      const a = document.createElement('a');
-      a.href = `${m.file}?id=${encodeURIComponent(t.id)}`;
-      a.innerHTML = `
-        <div class="mode-head">
-          <span class="mode-name"></span>
-          <span class="mode-diff ${m.diff}"></span>
+    const modesContainer = card.querySelector('.modes');
+    MODE_GROUPS.forEach(group => {
+      const groupEl = document.createElement('div');
+      groupEl.className = 'mode-group';
+      groupEl.innerHTML = `
+        <div class="mode-group-head">
+          <h4 class="mode-group-name"></h4>
+          <span class="mode-group-blurb"></span>
         </div>
-        <div class="mode-desc"></div>
+        <div class="mode-group-grid"></div>
       `;
-      a.querySelector('.mode-name').textContent = m.label;
-      a.querySelector('.mode-diff').textContent = m.diffLabel;
-      a.querySelector('.mode-desc').textContent = m.desc;
-      modesDiv.appendChild(a);
+      groupEl.querySelector('.mode-group-name').textContent = group.name;
+      groupEl.querySelector('.mode-group-blurb').textContent = group.blurb;
+      const grid = groupEl.querySelector('.mode-group-grid');
+      group.modes.forEach(m => {
+        const a = document.createElement('a');
+        a.href = `${m.file}?id=${encodeURIComponent(t.id)}`;
+        a.innerHTML = `
+          <div class="mode-head">
+            <span class="mode-name"></span>
+            <span class="mode-diff ${m.diff}"></span>
+          </div>
+          <div class="mode-desc"></div>
+        `;
+        a.querySelector('.mode-name').textContent = m.label;
+        a.querySelector('.mode-diff').textContent = m.diffLabel;
+        a.querySelector('.mode-desc').textContent = m.desc;
+        grid.appendChild(a);
+      });
+      modesContainer.appendChild(groupEl);
     });
     card.querySelector('.delete').addEventListener('click', () => {
       if (confirm(`Delete "${t.title}"?`)) {
