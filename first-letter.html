@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<title>First letters — Memorize</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  #text { font-size: 1.2rem; white-space: pre-wrap; max-width: 820px; line-height: 2; margin: 0 auto; }
+
+  .fl-word {
+    display: inline-block;
+    cursor: pointer;
+    padding: 0 3px;
+    border-bottom: 1px dashed #555;
+    user-select: none;
+    transition: background 0.12s, color 0.12s;
+  }
+  .fl-word:hover { background: #2a2a2a; }
+  .fl-word .first { color: var(--hint); font-weight: 600; }
+  .fl-word .rest-hidden { color: transparent; }
+  .fl-word .rest-revealed { color: var(--revealed); }
+  .fl-word.revealed { border-bottom-color: var(--revealed); }
+</style>
+</head>
+<body>
+
+<header>
+  <a class="home" href="index.html">← Home</a>
+  <span class="text-title" id="textTitle"></span>
+  <button id="revealAll">Reveal all</button>
+  <button id="hideAll" class="secondary">Hide all</button>
+  <label><input type="checkbox" id="dotMode"> Dots instead of letters</label>
+  <span class="stats" id="stats"></span>
+</header>
+
+<div id="text"></div>
+
+<script src="data.js"></script>
+<script>
+const textEl = document.getElementById('text');
+const stats = document.getElementById('stats');
+const dotModeEl = document.getElementById('dotMode');
+
+const activeText = getActiveText();
+document.getElementById('textTitle').textContent = activeText.title;
+document.title = activeText.title + ' — First letters';
+const { tokens, lineMap } = tokenize(activeText.body);
+
+// every word starts hidden; click to reveal
+tokens.forEach(t => {
+  if (t.type === 'token' && t.isWord) {
+    t.blanked = true;
+    t.revealed = false;
+  }
+});
+
+// split a token's text into [leadingPunct, firstLetter, rest, trailingPunct]
+// works on Unicode letters; punctuation/quotes/apostrophes stay visible.
+function splitWord(text) {
+  const chars = [...text];
+  let lead = '', firstLetter = '', rest = '', trail = '';
+  let i = 0;
+  while (i < chars.length && !WORD_REGEX.test(chars[i])) { lead += chars[i]; i++; }
+  if (i < chars.length) { firstLetter = chars[i]; i++; }
+  // find where trailing non-letters start (from end)
+  let j = chars.length - 1;
+  while (j >= i && !WORD_REGEX.test(chars[j])) { trail = chars[j] + trail; j--; }
+  // middle = i..j inclusive
+  for (let k = i; k <= j; k++) rest += chars[k];
+  return { lead, firstLetter, rest, trail };
+}
+
+function maskRest(rest, asDots) {
+  if (!asDots) return rest;
+  // length-preserving dots — 1 dot per letter, keep punctuation as-is
+  return [...rest].map(ch => WORD_REGEX.test(ch) ? '·' : ch).join('');
+}
+
+function render() {
+  textEl.innerHTML = '';
+  const asDots = dotModeEl.checked;
+  let total = 0, revealed = 0;
+
+  tokens.forEach((t, i) => {
+    if (t.type === 'break') {
+      textEl.appendChild(document.createElement('br'));
+      const sp = document.createElement('span');
+      sp.className = 'stanza-break';
+      textEl.appendChild(sp);
+    } else if (t.type === 'newline') {
+      textEl.appendChild(document.createElement('br'));
+    } else if (t.type === 'space') {
+      textEl.appendChild(document.createTextNode(t.text));
+    } else if (t.type === 'token') {
+      if (!t.isWord) {
+        textEl.appendChild(document.createTextNode(t.text));
+        return;
+      }
+      total++;
+      if (t.revealed) revealed++;
+
+      const { lead, firstLetter, rest, trail } = splitWord(t.text);
+      const wrap = document.createElement('span');
+      wrap.className = 'fl-word' + (t.revealed ? ' revealed' : '');
+
+      if (lead) wrap.appendChild(document.createTextNode(lead));
+
+      const first = document.createElement('span');
+      first.className = 'first';
+      first.textContent = firstLetter;
+      wrap.appendChild(first);
+
+      if (rest) {
+        const restEl = document.createElement('span');
+        restEl.className = t.revealed ? 'rest-revealed' : 'rest-hidden';
+        restEl.textContent = t.revealed ? rest : maskRest(rest, asDots);
+        wrap.appendChild(restEl);
+      }
+
+      if (trail) wrap.appendChild(document.createTextNode(trail));
+
+      wrap.addEventListener('click', () => {
+        tokens[i].revealed = !tokens[i].revealed;
+        render();
+      });
+      textEl.appendChild(wrap);
+    }
+  });
+
+  stats.textContent = `${revealed}/${total} revealed`;
+}
+
+document.getElementById('revealAll').addEventListener('click', () => {
+  tokens.forEach(t => { if (t.type === 'token' && t.isWord) t.revealed = true; });
+  render();
+});
+document.getElementById('hideAll').addEventListener('click', () => {
+  tokens.forEach(t => { if (t.type === 'token' && t.isWord) t.revealed = false; });
+  render();
+});
+dotModeEl.addEventListener('change', render);
+
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<title>RSVP — Memorize</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .rsvp-wrap {
+    margin: 2rem auto 0;
+    max-width: 900px;
+    text-align: center;
+  }
+  .rsvp-stage {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    font-family: 'Cascadia Code', Consolas, 'Courier New', monospace;
+    font-size: 3.2rem;
+    line-height: 1.2;
+    min-height: 5rem;
+    align-items: center;
+    margin-top: 4rem;
+    position: relative;
+  }
+  .rsvp-stage .before { text-align: right; padding-right: 4px; color: var(--fg); }
+  .rsvp-stage .orp { color: var(--accent); }
+  .rsvp-stage .after { text-align: left; padding-left: 4px; color: var(--fg); }
+  .rsvp-anchor {
+    position: absolute;
+    top: -1.4rem;
+    left: 50%;
+    transform: translateX(-50%);
+    color: var(--accent);
+    font-size: 0.9rem;
+    opacity: 0.6;
+  }
+  .rsvp-anchor::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    width: 1px;
+    height: 5rem;
+    background: var(--accent);
+    opacity: 0.15;
+  }
+  .progress {
+    height: 4px;
+    background: #2a2a2a;
+    border-radius: 2px;
+    margin: 0.5rem auto 0;
+    max-width: 900px;
+    overflow: hidden;
+  }
+  .progress > div {
+    height: 100%;
+    background: var(--accent);
+    width: 0;
+    transition: width 0.1s linear;
+  }
+  .rsvp-hint {
+    color: var(--muted);
+    font-size: 0.85rem;
+    margin-top: 6rem;
+    text-align: center;
+  }
+  .context-line {
+    color: var(--muted);
+    font-family: var(--font-reading);
+    font-size: 1.05rem;
+    margin-top: 2.2rem;
+    min-height: 1.4em;
+    text-align: center;
+    font-style: italic;
+    opacity: 0.7;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <a class="home" href="index.html">← Home</a>
+  <span class="text-title" id="textTitle"></span>
+  <button id="play">▶ Play</button>
+  <button id="restart" class="secondary">↺ Restart</button>
+  <button id="prev" class="secondary">◄</button>
+  <button id="next" class="secondary">►</button>
+  <label>WPM: <input type="range" id="wpm" min="100" max="1000" step="25" value="300"><span id="wpmVal">300</span></label>
+  <span class="stats" id="stats"></span>
+</header>
+
+<div class="progress"><div id="bar"></div></div>
+
+<div class="rsvp-wrap">
+  <div class="rsvp-stage">
+    <span class="rsvp-anchor">▼</span>
+    <span class="before" id="before"></span><span class="orp" id="orp"></span><span class="after" id="after"></span>
+  </div>
+  <div class="context-line" id="context"></div>
+</div>
+
+<div class="rsvp-hint">Space = play/pause · ← / → = step word · ↑ / ↓ = speed · R = restart</div>
+
+<script src="data.js"></script>
+<script>
+const activeText = getActiveText();
+document.getElementById('textTitle').textContent = activeText.title;
+document.title = activeText.title + ' — RSVP';
+
+const beforeEl = document.getElementById('before');
+const orpEl    = document.getElementById('orp');
+const afterEl  = document.getElementById('after');
+const contextEl = document.getElementById('context');
+const playBtn  = document.getElementById('play');
+const wpmEl    = document.getElementById('wpm');
+const wpmVal   = document.getElementById('wpmVal');
+const bar      = document.getElementById('bar');
+const stats    = document.getElementById('stats');
+
+const words = activeText.body.split(/\s+/).filter(w => w.length > 0);
+let idx = 0;
+let playing = false;
+let timer = null;
+
+function orpIndex(word) {
+  const len = [...word].length;
+  if (len <= 1)  return 0;
+  if (len <= 5)  return 1;
+  if (len <= 9)  return 2;
+  if (len <= 13) return 3;
+  return 4;
+}
+
+function showWord(i) {
+  if (i < 0 || i >= words.length) return;
+  const w = words[i];
+  const chars = [...w];
+  const o = orpIndex(w);
+  beforeEl.textContent = chars.slice(0, o).join('');
+  orpEl.textContent    = chars[o] || '';
+  afterEl.textContent  = chars.slice(o + 1).join('');
+
+  // surrounding context preview
+  const start = Math.max(0, i - 4);
+  const end = Math.min(words.length, i + 5);
+  const ctx = words.slice(start, end).map((cw, k) => {
+    return start + k === i ? `[${cw}]` : cw;
+  }).join(' ');
+  contextEl.textContent = ctx;
+
+  bar.style.width = (i / words.length * 100) + '%';
+  stats.textContent = `${i + 1} / ${words.length}`;
+}
+
+function delayFor(word) {
+  const wpm = +wpmEl.value;
+  const base = 60000 / wpm;
+  if (/[.!?]["')\]]?$/.test(word)) return base * 2.2;
+  if (/[,:;]["')\]]?$/.test(word)) return base * 1.5;
+  if (/[-—]$/.test(word))          return base * 1.3;
+  return base;
+}
+
+function step() {
+  if (!playing) return;
+  showWord(idx);
+  if (idx >= words.length - 1) {
+    pause();
+    return;
+  }
+  const d = delayFor(words[idx]);
+  idx++;
+  timer = setTimeout(step, d);
+}
+
+function play() {
+  if (idx >= words.length) idx = 0;
+  playing = true;
+  playBtn.textContent = '❚❚ Pause';
+  step();
+}
+
+function pause() {
+  playing = false;
+  playBtn.textContent = '▶ Play';
+  clearTimeout(timer);
+}
+
+function togglePlay() { playing ? pause() : play(); }
+
+function restart() {
+  pause();
+  idx = 0;
+  showWord(0);
+}
+
+function prev() {
+  pause();
+  if (idx > 0) idx--;
+  showWord(idx);
+}
+
+function next() {
+  pause();
+  if (idx < words.length - 1) idx++;
+  showWord(idx);
+}
+
+playBtn.addEventListener('click', togglePlay);
+document.getElementById('restart').addEventListener('click', restart);
+document.getElementById('prev').addEventListener('click', prev);
+document.getElementById('next').addEventListener('click', next);
+wpmEl.addEventListener('input', () => { wpmVal.textContent = wpmEl.value; });
+
+window.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT') return;
+  if (e.key === ' ') { e.preventDefault(); togglePlay(); }
+  else if (e.key === 'ArrowLeft')  prev();
+  else if (e.key === 'ArrowRight') next();
+  else if (e.key === 'ArrowUp')    { e.preventDefault(); wpmEl.value = Math.min(+wpmEl.max, +wpmEl.value + 25); wpmVal.textContent = wpmEl.value; }
+  else if (e.key === 'ArrowDown')  { e.preventDefault(); wpmEl.value = Math.max(+wpmEl.min, +wpmEl.value - 25); wpmVal.textContent = wpmEl.value; }
+  else if (e.key === 'r' || e.key === 'R') restart();
+});
+
+showWord(0);
+</script>
+</body>
+</html>

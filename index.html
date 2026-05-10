@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<title>Memorize</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="menu">
+  <h1>Memorize</h1>
+  <p class="subtitle">Pick a text, then pick a practice mode.</p>
+
+  <div id="textList"></div>
+
+  <div class="add-section">
+    <button id="addBtn">+ Add text</button>
+    <form id="addForm" hidden>
+      <input id="newTitle" placeholder="Title (e.g., Sonnet 18)" required>
+      <textarea id="newBody" placeholder="Paste your text here. Line breaks preserved." rows="8" required></textarea>
+      <div class="row">
+        <button type="submit">Save</button>
+        <button type="button" id="cancelAdd" class="secondary">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="data.js"></script>
+<script>
+const listEl = document.getElementById('textList');
+const addBtn = document.getElementById('addBtn');
+const form = document.getElementById('addForm');
+const titleInput = document.getElementById('newTitle');
+const bodyInput = document.getElementById('newBody');
+const cancelBtn = document.getElementById('cancelAdd');
+
+const MODES = [
+  {
+    label: 'Spread blanking',
+    file: 'spread.html',
+    diff: 'easy',
+    diffLabel: 'Beginner',
+    desc: 'Whole text visible. Hide a % of words. Slider scales difficulty. Best when first learning.'
+  },
+  {
+    label: 'First letters',
+    file: 'first-letter.html',
+    diff: 'medium',
+    diffLabel: 'Medium',
+    desc: 'Only first letter of each word shown. Recite the rest. Good middle-ground practice.'
+  },
+  {
+    label: 'Focus mode',
+    file: 'focus.html',
+    diff: 'hard',
+    diffLabel: 'Hard',
+    desc: '4 lines, big and centered, all hidden. Free recall — strongest test of memory.'
+  },
+  {
+    label: 'Type it out',
+    file: 'typing.html',
+    diff: 'expert',
+    diffLabel: 'Impossible',
+    desc: 'Type every letter from memory. Production effect — best for verification once you know it.'
+  },
+  {
+    label: 'RSVP (speed read)',
+    file: 'rsvp.html',
+    diff: 'aid',
+    diffLabel: 'Reading aid',
+    desc: 'Words flash one at a time at a fixed point. Adjustable WPM. Use for fast exposure before memorizing.'
+  },
+  {
+    label: 'Bionic reading',
+    file: 'bionic.html',
+    diff: 'aid',
+    diffLabel: 'Reading aid',
+    desc: 'First half of each word bolded — eye anchors faster. Visual aid for quicker reading.'
+  },
+];
+
+function render() {
+  listEl.innerHTML = '';
+  const texts = getAllTexts();
+  if (texts.length === 0) {
+    listEl.innerHTML = '<p style="color:var(--muted)">No texts yet. Add one below.</p>';
+    return;
+  }
+  texts.forEach(t => {
+    const card = document.createElement('div');
+    card.className = 'text-card';
+    card.innerHTML = `
+      <button class="delete" title="Delete">×</button>
+      <h3></h3>
+      <div class="meta"></div>
+      <div class="modes"></div>
+    `;
+    card.querySelector('h3').textContent = t.title;
+    card.querySelector('.meta').textContent =
+      `${countLines(t.body)} lines · ${countWords(t.body)} words`;
+    const modesDiv = card.querySelector('.modes');
+    MODES.forEach(m => {
+      const a = document.createElement('a');
+      a.href = `${m.file}?id=${encodeURIComponent(t.id)}`;
+      a.innerHTML = `
+        <div class="mode-head">
+          <span class="mode-name"></span>
+          <span class="mode-diff ${m.diff}"></span>
+        </div>
+        <div class="mode-desc"></div>
+      `;
+      a.querySelector('.mode-name').textContent = m.label;
+      a.querySelector('.mode-diff').textContent = m.diffLabel;
+      a.querySelector('.mode-desc').textContent = m.desc;
+      modesDiv.appendChild(a);
+    });
+    card.querySelector('.delete').addEventListener('click', () => {
+      if (confirm(`Delete "${t.title}"?`)) {
+        removeText(t.id);
+        render();
+      }
+    });
+    listEl.appendChild(card);
+  });
+}
+
+addBtn.addEventListener('click', () => {
+  form.hidden = false;
+  addBtn.hidden = true;
+  titleInput.focus();
+});
+cancelBtn.addEventListener('click', () => {
+  form.hidden = true;
+  addBtn.hidden = false;
+  titleInput.value = '';
+  bodyInput.value = '';
+});
+form.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const title = titleInput.value.trim();
+  const body = bodyInput.value.trim();
+  if (!title || !body) return;
+  addText(title, body);
+  titleInput.value = '';
+  bodyInput.value = '';
+  form.hidden = true;
+  addBtn.hidden = false;
+  render();
+});
+
+render();
+</script>
+</body>
+</html>

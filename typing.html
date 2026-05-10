@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<title>Type it out — Memorize</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  #text {
+    font-family: 'Cascadia Code', Consolas, 'Courier New', monospace;
+    font-size: 1.15rem;
+    line-height: 1.9;
+    max-width: 900px;
+    white-space: pre-wrap;
+    margin-top: 1rem;
+    user-select: none;
+    outline: none;
+  }
+  .ch { display: inline; }
+  .punct { color: var(--fg); }
+  .pending { color: #444; }
+  .cursor {
+    background: var(--accent);
+    color: #000;
+    border-radius: 2px;
+    animation: blink 1s steps(2) infinite;
+  }
+  @keyframes blink {
+    50% { background: #2a486f; }
+  }
+  .typed { color: var(--revealed); }
+  .bad-flash {
+    background: #b03a3a !important;
+    color: #fff !important;
+    animation: none;
+  }
+  .hint {
+    color: var(--muted);
+    font-size: 0.85rem;
+    margin-top: 1rem;
+    max-width: 900px;
+  }
+  .progress {
+    height: 4px;
+    background: #2a2a2a;
+    border-radius: 2px;
+    margin-top: 0.6rem;
+    max-width: 900px;
+    overflow: hidden;
+  }
+  .progress > div {
+    height: 100%;
+    background: var(--revealed);
+    width: 0;
+    transition: width 0.15s;
+  }
+  .done {
+    color: var(--revealed);
+    font-weight: 600;
+    margin-top: 1rem;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <a class="home" href="index.html">← Home</a>
+  <span class="text-title" id="textTitle"></span>
+  <button id="reset" class="secondary">Reset</button>
+  <button id="hint">Reveal next letter</button>
+  <span class="stats" id="stats"></span>
+</header>
+
+<div class="progress"><div id="bar"></div></div>
+<div id="text" tabindex="0"></div>
+<div class="hint">
+  Type the text. Punctuation appears for free; letters need typing.
+  Case-insensitive. Turkish equivalents accepted: <b>ı/İ/i/I</b> · <b>o/O/ö/Ö</b> · <b>u/U/ü/Ü</b> · <b>s/S/ş/Ş</b> · <b>g/G/ğ/Ğ</b> · <b>c/C/ç/Ç</b>.
+  <br><b>Tab</b> = reveal 1 letter · <b>Enter</b> = reveal whole word · <b>Backspace</b> = undo · Space ignored.
+</div>
+<div id="done" class="done" style="display:none">Done. <a href="#" id="restart">Restart?</a></div>
+
+<script src="data.js"></script>
+<script>
+const textEl = document.getElementById('text');
+const stats = document.getElementById('stats');
+const bar = document.getElementById('bar');
+const doneEl = document.getElementById('done');
+
+// Turkish-aware canonicalization. All chars in the same group are equivalent.
+const TR_GROUPS = [
+  'aAâÂ',
+  'cCçÇ',
+  'eE',
+  'gGğĞ',
+  'iIıİîÎ',
+  'oOöÖ',
+  'sSşŞ',
+  'uUüÜûÛ',
+];
+const CANON_MAP = {};
+for (const g of TR_GROUPS) {
+  const key = g[0].toLowerCase();
+  for (const ch of g) CANON_MAP[ch] = key;
+}
+function canon(ch) {
+  if (ch in CANON_MAP) return CANON_MAP[ch];
+  return ch.toLowerCase();
+}
+
+const isLetter = (ch) => /\p{L}/u.test(ch);
+
+const activeText = getActiveText();
+document.getElementById('textTitle').textContent = activeText.title;
+document.title = activeText.title + ' — Type';
+const chars = [...activeText.body];
+let pos = 0;
+let mistakes = 0;
+let typedFlag = []; // typedFlag[i] = true once that letter slot has been filled
+
+function skipNonLetters() {
+  while (pos < chars.length && !isLetter(chars[pos])) pos++;
+}
+
+function reset() {
+  pos = 0;
+  mistakes = 0;
+  typedFlag = [];
+  skipNonLetters();
+  doneEl.style.display = 'none';
+  render();
+  textEl.focus();
+}
+
+function render() {
+  textEl.innerHTML = '';
+  chars.forEach((ch, i) => {
+    if (ch === '\n') {
+      textEl.appendChild(document.createElement('br'));
+      return;
+    }
+    const span = document.createElement('span');
+    span.className = 'ch';
+    if (!isLetter(ch)) {
+      span.classList.add('punct');
+      span.textContent = ch;
+    } else if (typedFlag[i]) {
+      span.classList.add('typed');
+      span.textContent = ch;
+    } else if (i === pos) {
+      span.classList.add('cursor');
+      span.textContent = '_';
+      span.id = 'cursor';
+    } else {
+      span.classList.add('pending');
+      span.textContent = '_';
+    }
+    textEl.appendChild(span);
+  });
+
+  // letter-only progress
+  let totalLetters = 0, doneLetters = 0;
+  for (let i = 0; i < chars.length; i++) {
+    if (isLetter(chars[i])) {
+      totalLetters++;
+      if (typedFlag[i]) doneLetters++;
+    }
+  }
+  bar.style.width = (totalLetters ? (doneLetters / totalLetters * 100) : 0) + '%';
+  stats.textContent = `${doneLetters}/${totalLetters} letters · ${mistakes} mistakes`;
+
+  if (pos >= chars.length) {
+    doneEl.style.display = 'block';
+  }
+
+  const cur = document.getElementById('cursor');
+  if (cur) cur.scrollIntoView({ block: 'center', behavior: 'smooth' });
+}
+
+function flashBad() {
+  const cur = document.getElementById('cursor');
+  if (!cur) return;
+  cur.classList.add('bad-flash');
+  setTimeout(() => {
+    const c = document.getElementById('cursor');
+    if (c) c.classList.remove('bad-flash');
+  }, 180);
+}
+
+function tryChar(typed) {
+  if (pos >= chars.length) return;
+  const expected = chars[pos];
+  if (!isLetter(expected)) { skipNonLetters(); render(); return; }
+  if (canon(typed) === canon(expected)) {
+    typedFlag[pos] = true;
+    pos++;
+    skipNonLetters();
+    render();
+  } else {
+    mistakes++;
+    flashBad();
+    stats.textContent = stats.textContent.replace(/\d+ mistakes/, mistakes + ' mistakes');
+  }
+}
+
+function backspace() {
+  if (pos === 0) return;
+  let p = pos - 1;
+  while (p > 0 && !isLetter(chars[p])) p--;
+  if (!isLetter(chars[p])) return;
+  typedFlag[p] = false;
+  pos = p;
+  doneEl.style.display = 'none';
+  render();
+}
+
+function reveal() {
+  if (pos >= chars.length) return;
+  if (!isLetter(chars[pos])) { skipNonLetters(); render(); return; }
+  mistakes++;
+  typedFlag[pos] = true;
+  pos++;
+  skipNonLetters();
+  render();
+}
+
+function revealWord() {
+  if (pos >= chars.length) return;
+  mistakes++;
+  while (pos < chars.length && !/\s/.test(chars[pos])) {
+    if (isLetter(chars[pos])) typedFlag[pos] = true;
+    pos++;
+  }
+  skipNonLetters();
+  render();
+}
+
+window.addEventListener('keydown', (e) => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.key === 'Backspace') {
+    e.preventDefault();
+    backspace();
+    return;
+  }
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    reveal();
+    return;
+  }
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    revealWord();
+    return;
+  }
+  if (e.key === ' ') {
+    e.preventDefault(); // stop page scroll, ignore as input
+    return;
+  }
+  if (e.key.length !== 1) return;
+  if (!isLetter(e.key)) return; // only letters typed; punctuation auto-displays
+  e.preventDefault();
+  tryChar(e.key);
+});
+
+document.getElementById('reset').addEventListener('click', reset);
+document.getElementById('hint').addEventListener('click', reveal);
+document.getElementById('restart').addEventListener('click', (e) => {
+  e.preventDefault();
+  reset();
+});
+
+reset();
+</script>
+</body>
+</html>

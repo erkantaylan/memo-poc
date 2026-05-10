@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<title>Focus mode — Memorize</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  #focus {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 70vh;
+    padding: 2rem;
+    text-align: center;
+    gap: 1.2rem;
+  }
+  .fline {
+    font-size: 2.1rem;
+    line-height: 1.55;
+    max-width: 1100px;
+    letter-spacing: 0.005em;
+  }
+  .fline .blank {
+    font-size: 1.9rem;
+    padding: 2px 10px;
+    margin: 0 2px;
+  }
+  .chunk-info { color: var(--muted); font-size: 0.9rem; }
+  .hint { color: var(--muted); font-size: 0.85rem; margin-top: 0.5rem; }
+</style>
+</head>
+<body>
+
+<header>
+  <a class="home" href="index.html">← Home</a>
+  <span class="text-title" id="textTitle"></span>
+  <button id="prev" class="secondary">◄ Prev</button>
+  <button id="revealLine">Reveal next line</button>
+  <button id="resetChunk" class="secondary">Hide all</button>
+  <button id="next" class="secondary">Next ►</button>
+  <span id="chunkInfo" class="chunk-info"></span>
+  <span class="stats" id="stats"></span>
+</header>
+
+<div id="focus"></div>
+<div class="hint" style="text-align:center">Keys: Space = reveal next line · ← / → = prev / next chunk · R = reset</div>
+
+<script src="data.js"></script>
+<script>
+const focusEl = document.getElementById('focus');
+const stats = document.getElementById('stats');
+const chunkInfo = document.getElementById('chunkInfo');
+
+const activeText = getActiveText();
+document.getElementById('textTitle').textContent = activeText.title;
+document.title = activeText.title + ' — Focus';
+const { tokens, lineMap } = tokenize(activeText.body);
+const CHUNK_SIZE = 4;
+let chunkStart = 0;
+
+function blankAllInChunk() {
+  tokens.forEach(t => {
+    if (t.type === 'token' && t.isWord) { t.blanked = false; t.revealed = false; }
+  });
+  for (let li = chunkStart; li < Math.min(chunkStart + CHUNK_SIZE, lineMap.length); li++) {
+    lineMap[li].forEach(idx => {
+      const t = tokens[idx];
+      if (t.type === 'token' && t.isWord) {
+        t.blanked = true;
+        t.revealed = false;
+      }
+    });
+  }
+}
+
+function render() {
+  focusEl.innerHTML = '';
+  const end = Math.min(chunkStart + CHUNK_SIZE, lineMap.length);
+  let blankCount = 0, revealedCount = 0;
+
+  for (let li = chunkStart; li < end; li++) {
+    const lineDiv = document.createElement('div');
+    lineDiv.className = 'fline';
+    lineMap[li].forEach(idx => {
+      const t = tokens[idx];
+      if (t.type === 'space') {
+        lineDiv.appendChild(document.createTextNode(t.text));
+      } else if (t.type === 'token') {
+        if (t.blanked) {
+          blankCount++;
+          const span = document.createElement('span');
+          span.className = 'blank' + (t.revealed ? ' revealed' : '');
+          span.textContent = t.text;
+          span.addEventListener('click', () => {
+            tokens[idx].revealed = !tokens[idx].revealed;
+            render();
+          });
+          lineDiv.appendChild(span);
+          if (t.revealed) revealedCount++;
+        } else {
+          const span = document.createElement('span');
+          span.className = 'word';
+          span.textContent = t.text;
+          lineDiv.appendChild(span);
+        }
+      }
+    });
+    focusEl.appendChild(lineDiv);
+  }
+  chunkInfo.textContent = `Lines ${chunkStart + 1}–${end} of ${lineMap.length}`;
+  stats.textContent = `${revealedCount}/${blankCount} revealed`;
+}
+
+document.getElementById('prev').addEventListener('click', () => {
+  chunkStart = Math.max(0, chunkStart - CHUNK_SIZE);
+  blankAllInChunk();
+  render();
+});
+document.getElementById('next').addEventListener('click', () => {
+  if (chunkStart + CHUNK_SIZE < lineMap.length) {
+    chunkStart += CHUNK_SIZE;
+    blankAllInChunk();
+    render();
+  }
+});
+document.getElementById('resetChunk').addEventListener('click', () => {
+  blankAllInChunk();
+  render();
+});
+document.getElementById('revealLine').addEventListener('click', () => {
+  const end = Math.min(chunkStart + CHUNK_SIZE, lineMap.length);
+  for (let li = chunkStart; li < end; li++) {
+    const hasHidden = lineMap[li].some(idx => {
+      const t = tokens[idx];
+      return t.type === 'token' && t.isWord && t.blanked && !t.revealed;
+    });
+    if (hasHidden) {
+      lineMap[li].forEach(idx => {
+        const t = tokens[idx];
+        if (t.type === 'token' && t.isWord && t.blanked) t.revealed = true;
+      });
+      break;
+    }
+  }
+  render();
+});
+
+window.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT') return;
+  if (e.key === 'ArrowRight') document.getElementById('next').click();
+  else if (e.key === 'ArrowLeft') document.getElementById('prev').click();
+  else if (e.key === ' ' || e.key === 'Enter') {
+    e.preventDefault();
+    document.getElementById('revealLine').click();
+  } else if (e.key === 'r' || e.key === 'R') {
+    document.getElementById('resetChunk').click();
+  }
+});
+
+blankAllInChunk();
+render();
+</script>
+</body>
+</html>

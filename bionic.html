@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<title>Bionic reading — Memorize</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  #text {
+    white-space: pre-wrap;
+    margin: 1rem auto 3rem;
+    /* font-family, font-size, line-height, max-width, letter/word-spacing set via JS */
+  }
+  #text b {
+    color: var(--fg);
+    font-weight: 700;
+  }
+  #text .rest {
+    color: var(--muted);
+    font-weight: 400;
+  }
+  #text .punct { color: var(--muted); }
+  .stanza-break { display: block; height: 0.7rem; }
+  .hint {
+    color: var(--muted);
+    font-size: 0.85rem;
+    margin: 0 auto 1rem;
+    max-width: 900px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <a class="home" href="index.html">← Home</a>
+  <span class="text-title" id="textTitle"></span>
+  <span class="stats" id="stats"></span>
+</header>
+
+<details class="opts" open>
+  <summary>Reader options</summary>
+  <div class="opt-grid">
+    <label>Font
+      <select id="font">
+        <option value="serif">Serif (default)</option>
+        <option value="sans">Sans-serif</option>
+        <option value="mono">Monospace</option>
+      </select>
+      <span class="val"></span>
+    </label>
+    <label>Theme
+      <select id="theme">
+        <option value="sepia">Sepia (default)</option>
+        <option value="dark">Neutral dark</option>
+        <option value="light">Light (paper)</option>
+      </select>
+      <span class="val"></span>
+    </label>
+    <label>Font size
+      <input type="range" id="size" min="14" max="36" step="1" value="20">
+      <span class="val" id="sizeVal">20px</span>
+    </label>
+    <label>Bold %
+      <input type="range" id="pct" min="20" max="80" step="5" value="50">
+      <span class="val" id="pctVal">50%</span>
+    </label>
+    <label>Line height
+      <input type="range" id="lh" min="120" max="260" step="5" value="195">
+      <span class="val" id="lhVal">1.95</span>
+    </label>
+    <label>Letter spacing
+      <input type="range" id="ls" min="0" max="20" step="1" value="0">
+      <span class="val" id="lsVal">0.00em</span>
+    </label>
+    <label>Word spacing
+      <input type="range" id="ws" min="0" max="50" step="2" value="0">
+      <span class="val" id="wsVal">0.00em</span>
+    </label>
+    <label>Width
+      <input type="range" id="width" min="400" max="1200" step="20" value="720">
+      <span class="val" id="widthVal">720px</span>
+    </label>
+    <label class="full checkbox">
+      <input type="checkbox" id="stripMd">
+      <span>Strip Markdown formatting (<code>**bold**</code>, <code>[link](url)</code>, headings, etc.) — applies to all modes</span>
+    </label>
+  </div>
+</details>
+
+<div id="text"></div>
+
+<div class="hint">
+  Brain auto-completes the bolded prefix. Tune bold % to match your reading skill — higher means more help.
+</div>
+
+<script src="data.js"></script>
+<script>
+const FONTS = {
+  serif: "'Iowan Old Style', Charter, 'Source Serif Pro', Cambria, Georgia, serif",
+  sans:  "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
+  mono:  "'Cascadia Code', Consolas, 'Courier New', monospace",
+};
+
+// Apply theme on load (before reading text so palette is right immediately)
+function applyTheme(name) {
+  document.body.classList.remove('theme-sepia', 'theme-dark', 'theme-light');
+  if (name && name !== 'sepia') document.body.classList.add('theme-' + name);
+}
+
+// Initial pref load
+const initialTheme = getPref('theme', 'sepia');
+applyTheme(initialTheme);
+
+const activeText = getActiveText();
+document.getElementById('textTitle').textContent = activeText.title;
+document.title = activeText.title + ' — Bionic';
+
+const textEl = document.getElementById('text');
+const stats  = document.getElementById('stats');
+
+const els = {
+  font: document.getElementById('font'),
+  theme: document.getElementById('theme'),
+  size: document.getElementById('size'),
+  pct:  document.getElementById('pct'),
+  lh:   document.getElementById('lh'),
+  ls:   document.getElementById('ls'),
+  ws:   document.getElementById('ws'),
+  width:document.getElementById('width'),
+  stripMd: document.getElementById('stripMd'),
+};
+const vals = {
+  size: document.getElementById('sizeVal'),
+  pct:  document.getElementById('pctVal'),
+  lh:   document.getElementById('lhVal'),
+  ls:   document.getElementById('lsVal'),
+  ws:   document.getElementById('wsVal'),
+  width:document.getElementById('widthVal'),
+};
+
+// Restore prefs
+els.font.value    = getPref('font', 'serif');
+els.theme.value   = initialTheme;
+els.size.value    = getPref('size', 20);
+els.pct.value     = getPref('boldPct', 50);
+els.lh.value      = getPref('lh', 195);
+els.ls.value      = getPref('ls', 0);
+els.ws.value      = getPref('ws', 0);
+els.width.value   = getPref('width', 720);
+els.stripMd.checked = getPref('stripMd', false);
+
+const LETTER = /\p{L}/u;
+
+function splitToken(tok) {
+  const chars = [...tok];
+  let i = 0, j = chars.length - 1;
+  while (i < chars.length && !LETTER.test(chars[i])) i++;
+  while (j >= i && !LETTER.test(chars[j])) j--;
+  if (i > j) return { lead: tok, core: '', trail: '' };
+  return {
+    lead:  chars.slice(0, i).join(''),
+    core:  chars.slice(i, j + 1).join(''),
+    trail: chars.slice(j + 1).join(''),
+  };
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+}
+
+function bionicWord(tok, pct) {
+  const { lead, core, trail } = splitToken(tok);
+  if (!core) return escapeHtml(tok);
+  const coreChars = [...core];
+  const boldLen = Math.max(1, Math.ceil(coreChars.length * pct / 100));
+  const bold = coreChars.slice(0, boldLen).join('');
+  const rest = coreChars.slice(boldLen).join('');
+  return (
+    `<span class="punct">${escapeHtml(lead)}</span>` +
+    `<b>${escapeHtml(bold)}</b>` +
+    `<span class="rest">${escapeHtml(rest)}</span>` +
+    `<span class="punct">${escapeHtml(trail)}</span>`
+  );
+}
+
+let cachedBody = activeText.body;
+function refreshBody() {
+  // re-resolve body if strip-md toggled (getActiveText reads pref each time)
+  cachedBody = getActiveText().body;
+}
+
+function render() {
+  const fontKey = els.font.value;
+  const size  = +els.size.value;
+  const pct   = +els.pct.value;
+  const lh    = +els.lh.value / 100;
+  const ls    = +els.ls.value / 100;
+  const ws    = +els.ws.value / 100;
+  const width = +els.width.value;
+
+  vals.size.textContent  = size + 'px';
+  vals.pct.textContent   = pct + '%';
+  vals.lh.textContent    = lh.toFixed(2);
+  vals.ls.textContent    = ls.toFixed(2) + 'em';
+  vals.ws.textContent    = ws.toFixed(2) + 'em';
+  vals.width.textContent = width + 'px';
+
+  textEl.style.fontFamily   = FONTS[fontKey];
+  textEl.style.fontSize     = size + 'px';
+  textEl.style.lineHeight   = lh;
+  textEl.style.letterSpacing = ls + 'em';
+  textEl.style.wordSpacing  = ws + 'em';
+  textEl.style.maxWidth     = width + 'px';
+
+  let wordCount = 0;
+  const lines = cachedBody.split('\n');
+  const html = lines.map(line => {
+    if (line.trim() === '') return '<span class="stanza-break"></span>';
+    const parts = line.split(/(\s+)/);
+    return parts.map(p => {
+      if (/^\s+$/.test(p)) return escapeHtml(p);
+      if (!LETTER.test(p)) return `<span class="punct">${escapeHtml(p)}</span>`;
+      wordCount++;
+      return bionicWord(p, pct);
+    }).join('');
+  }).join('\n');
+
+  textEl.innerHTML = html;
+  stats.textContent = `${wordCount} words`;
+}
+
+// Wire up changes
+function bindRange(el, prefKey) {
+  el.addEventListener('input', () => {
+    setPref(prefKey, +el.value);
+    render();
+  });
+}
+bindRange(els.size, 'size');
+bindRange(els.pct,  'boldPct');
+bindRange(els.lh,   'lh');
+bindRange(els.ls,   'ls');
+bindRange(els.ws,   'ws');
+bindRange(els.width,'width');
+
+els.font.addEventListener('change', () => { setPref('font', els.font.value); render(); });
+els.theme.addEventListener('change', () => {
+  setPref('theme', els.theme.value);
+  applyTheme(els.theme.value);
+});
+els.stripMd.addEventListener('change', () => {
+  setPref('stripMd', els.stripMd.checked);
+  refreshBody();
+  render();
+});
+
+render();
+</script>
+</body>
+</html>
