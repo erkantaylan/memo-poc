@@ -1,0 +1,7 @@
+debug-clipboard.png
+debug-clipboard.txt
+.DS_Store
+Thumbs.db
+node_modules/
+.vscode/
+.idea/
