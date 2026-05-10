@@ -1,0 +1,32 @@
+{
+  "expo": {
+    "name": "Memo",
+    "slug": "memo-poc",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "memo",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.erkantaylan.memo"
+    },
+    "android": {
+      "package": "com.erkantaylan.memo",
+      "adaptiveIcon": {
+        "backgroundColor": "#1c1a16"
+      },
+      "edgeToEdgeEnabled": true
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static"
+    },
+    "plugins": [
+      "expo-router"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
