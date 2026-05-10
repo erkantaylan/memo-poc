@@ -251,6 +251,10 @@ body.theme-light {
   --blank-border: #b9a986;
   --revealed: #3f6a2c;
   --hint: #7a5618;
+  --border: #c9b994;
+  --btn-secondary-bg: #e2d2af;
+  --btn-secondary-fg: var(--fg);
+  --panel-bg: rgba(0,0,0,0.03);
 }
 body.theme-dark {
   --bg: #161616;
@@ -261,6 +265,10 @@ body.theme-dark {
   --blank-border: #3a3a3a;
   --revealed: #7fd97f;
   --hint: #e3c889;
+  --border: #3a3a3a;
+  --btn-secondary-bg: #2a2a2a;
+  --btn-secondary-fg: var(--fg);
+  --panel-bg: rgba(255,255,255,0.03);
 }
 /* sepia is the default :root palette */
 
