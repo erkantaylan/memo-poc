@@ -29,10 +29,15 @@
 <div id="text"></div>
 
 <script src="data.js"></script>
+<script src="reader.js"></script>
 <script>
 const activeText = getActiveText();
 document.getElementById('textTitle').textContent = activeText.title;
 document.title = activeText.title + ' — Spread';
+installReaderOptions({
+  textEl: document.getElementById('text'),
+  include: ['font', 'theme', 'size', 'lh', 'ls', 'ws', 'width', 'stripMd'],
+});
 
 const textEl = document.getElementById('text');
 const pctEl = document.getElementById('pct');

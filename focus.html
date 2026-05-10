@@ -20,6 +20,7 @@
     line-height: 1.55;
     max-width: 1100px;
     letter-spacing: 0.005em;
+    font-family: inherit;
   }
   .fline .blank {
     font-size: 1.9rem;
@@ -47,6 +48,7 @@
 <div class="hint" style="text-align:center">Keys: Space = reveal next line · ← / → = prev / next chunk · R = reset</div>
 
 <script src="data.js"></script>
+<script src="reader.js"></script>
 <script>
 const focusEl = document.getElementById('focus');
 const stats = document.getElementById('stats');
@@ -55,6 +57,10 @@ const chunkInfo = document.getElementById('chunkInfo');
 const activeText = getActiveText();
 document.getElementById('textTitle').textContent = activeText.title;
 document.title = activeText.title + ' — Focus';
+installReaderOptions({
+  textEl: focusEl,
+  include: ['font', 'theme', 'stripMd'],
+});
 const { tokens, lineMap } = tokenize(activeText.body);
 const CHUNK_SIZE = 4;
 let chunkStart = 0;

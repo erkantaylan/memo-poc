@@ -36,10 +36,15 @@
 <div id="text"></div>
 
 <script src="data.js"></script>
+<script src="reader.js"></script>
 <script>
 const activeText = getActiveText();
 document.getElementById('textTitle').textContent = activeText.title;
 document.title = activeText.title + ' — First letters';
+installReaderOptions({
+  textEl: document.getElementById('text'),
+  include: ['font', 'theme', 'size', 'lh', 'ls', 'ws', 'width', 'stripMd'],
+});
 const { tokens, lineMap } = tokenize(activeText.body);
 const bodyLines = activeText.body.split('\n');
 

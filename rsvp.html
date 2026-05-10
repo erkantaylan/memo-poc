@@ -101,10 +101,14 @@
 <div class="rsvp-hint">Space = play/pause · ← / → = step word · ↑ / ↓ = speed · R = restart</div>
 
 <script src="data.js"></script>
+<script src="reader.js"></script>
 <script>
 const activeText = getActiveText();
 document.getElementById('textTitle').textContent = activeText.title;
 document.title = activeText.title + ' — RSVP';
+installReaderOptions({
+  include: ['theme', 'stripMd'],
+});
 
 const beforeEl = document.getElementById('before');
 const orpEl    = document.getElementById('orp');

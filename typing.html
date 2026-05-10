@@ -80,11 +80,16 @@
 <div id="done" class="done" style="display:none">Done. <a href="#" id="restart">Restart?</a></div>
 
 <script src="data.js"></script>
+<script src="reader.js"></script>
 <script>
 const textEl = document.getElementById('text');
 const stats = document.getElementById('stats');
 const bar = document.getElementById('bar');
 const doneEl = document.getElementById('done');
+installReaderOptions({
+  textEl,
+  include: ['theme', 'size', 'lh', 'width', 'stripMd'],
+});
 
 // Turkish-aware canonicalization. All chars in the same group are equivalent.
 const TR_GROUPS = [
