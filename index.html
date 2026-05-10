@@ -17,7 +17,15 @@
     <button id="addBtn">+ Add text</button>
     <form id="addForm" hidden>
       <input id="newTitle" placeholder="Title (e.g., Sonnet 18)" required>
-      <textarea id="newBody" placeholder="Paste your text here. Line breaks preserved." rows="8" required></textarea>
+      <div class="row file-row">
+        <label class="file-btn">
+          Load from file
+          <input type="file" id="fileInput" accept=".md,.markdown,.txt" hidden>
+        </label>
+        <button type="button" id="cleanBtn" class="secondary">Clean ✨</button>
+        <span class="size-info" id="sizeInfo"></span>
+      </div>
+      <textarea id="newBody" placeholder="Paste your text here, or load a .md / .txt file. Markdown + HTML get stripped on Clean / Load." rows="12" required></textarea>
       <div class="row">
         <button type="submit">Save</button>
         <button type="button" id="cancelAdd" class="secondary">Cancel</button>
@@ -34,6 +42,37 @@ const form = document.getElementById('addForm');
 const titleInput = document.getElementById('newTitle');
 const bodyInput = document.getElementById('newBody');
 const cancelBtn = document.getElementById('cancelAdd');
+const fileInput = document.getElementById('fileInput');
+const cleanBtn = document.getElementById('cleanBtn');
+const sizeInfo = document.getElementById('sizeInfo');
+
+function updateSizeInfo() {
+  const len = bodyInput.value.length;
+  const words = (bodyInput.value.match(/\p{L}+/gu) || []).length;
+  sizeInfo.textContent = len ? `${words.toLocaleString()} words · ${(len/1024).toFixed(1)} KB` : '';
+}
+
+fileInput.addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    const raw = await file.text();
+    if (!titleInput.value.trim()) {
+      titleInput.value = file.name.replace(/\.(md|markdown|txt)$/i, '');
+    }
+    bodyInput.value = cleanText(raw);
+    updateSizeInfo();
+  } catch (err) {
+    alert('Could not read file: ' + err.message);
+  }
+});
+
+cleanBtn.addEventListener('click', () => {
+  bodyInput.value = cleanText(bodyInput.value);
+  updateSizeInfo();
+});
+
+bodyInput.addEventListener('input', updateSizeInfo);
 
 const MODES = [
   {
@@ -135,15 +174,24 @@ cancelBtn.addEventListener('click', () => {
   addBtn.hidden = false;
   titleInput.value = '';
   bodyInput.value = '';
+  fileInput.value = '';
+  updateSizeInfo();
 });
 form.addEventListener('submit', (e) => {
   e.preventDefault();
   const title = titleInput.value.trim();
   const body = bodyInput.value.trim();
   if (!title || !body) return;
-  addText(title, body);
+  try {
+    addText(title, body);
+  } catch (err) {
+    alert('Could not save: ' + err.message + '\n(Text may be too large for sessionStorage.)');
+    return;
+  }
   titleInput.value = '';
   bodyInput.value = '';
+  fileInput.value = '';
+  updateSizeInfo();
   form.hidden = true;
   addBtn.hidden = false;
   render();

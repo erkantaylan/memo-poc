@@ -188,7 +188,24 @@ button.secondary { background: #333; color: var(--fg); }
 }
 #addForm textarea { font-family: 'Cascadia Code', Consolas, monospace; font-size: 0.95rem; }
 #addForm input:focus, #addForm textarea:focus { outline: none; border-color: var(--accent); }
-#addForm .row { display: flex; gap: 0.5rem; }
+#addForm .row { display: flex; gap: 0.5rem; align-items: center; }
+.file-row { margin-bottom: 0.7rem; flex-wrap: wrap; }
+.file-btn {
+  display: inline-block;
+  background: var(--accent);
+  color: #000;
+  padding: 0.4rem 0.9rem;
+  border-radius: 4px;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 0.95rem;
+}
+.file-btn:hover { filter: brightness(1.1); }
+.size-info {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin-left: auto;
+}
 
 .text-title {
   color: var(--muted);

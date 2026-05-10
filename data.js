@@ -189,18 +189,61 @@ function pickBlanksPerLine(tokens, lineMap, pct) {
 function stripMarkdown(text) {
   return text
     .replace(/^---+\s*$/gm, '')             // hr
-    .replace(/^\s{0,3}#{1,6}\s+/gm, '')     // headings
+    .replace(/^\s{0,3}#{1,6}\s*/gm, '')     // headings (incl. empty "# ")
     .replace(/^\s*>\s?/gm, '')              // blockquote markers
     .replace(/^\s*[-*+]\s+/gm, '')          // unordered list
     .replace(/^\s*\d+\.\s+/gm, '')          // ordered list
-    .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1') // image → alt
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // link → text
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1') // image → alt
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1') // link → text
     .replace(/\*\*([^*]+)\*\*/g, '$1')      // **bold**
     .replace(/__([^_]+)__/g, '$1')          // __bold__
-    .replace(/(^|[^*])\*([^*\n]+)\*/g, '$1$2') // *italic* (not inside **)
+    .replace(/(^|[^*])\*([^*\n]+)\*/g, '$1$2') // *italic*
     .replace(/(^|[^_])_([^_\n]+)_/g, '$1$2')   // _italic_
     .replace(/~~([^~]+)~~/g, '$1')          // ~~strike~~
-    .replace(/`([^`]+)`/g, '$1');           // `code`
+    .replace(/`([^`]+)`/g, '$1')            // `code`
+    .replace(/\\([\\`*_{}\[\]()#+\-.!|])/g, '$1'); // escaped chars
+}
+
+// Strip HTML tags + decode the common named entities. Block-level tags
+// become a line break so paragraphs survive readable.
+function stripHtml(text) {
+  return text
+    .replace(/<\s*(br|p|div|section|article|li|tr|h[1-6])\b[^>]*>/gi, '\n')
+    .replace(/<\s*\/\s*(p|div|section|article|li|tr|h[1-6])\s*>/gi, '\n')
+    .replace(/<!--[\s\S]*?-->/g, '')        // HTML comments
+    .replace(/<\s*style\b[\s\S]*?<\s*\/\s*style\s*>/gi, '')
+    .replace(/<\s*script\b[\s\S]*?<\s*\/\s*script\s*>/gi, '')
+    .replace(/<[^>]+>/g, '')                // remaining tags
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&apos;/gi, "'")
+    .replace(/&hellip;/gi, '…')
+    .replace(/&mdash;/gi, '—')
+    .replace(/&ndash;/gi, '–')
+    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(+n))
+    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)));
+}
+
+// Normalize whitespace and collapse runs of blank lines.
+function tidyText(text) {
+  return text
+    .replace(/\r\n?/g, '\n')
+    .replace(/ /g, ' ')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n[ \t]+/g, '\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/^\s+|\s+$/g, '');
+}
+
+// One-shot cleaner used by the "Add text" form. Order matters: HTML first
+// (it may contain markdown-like chars), then markdown, then tidy.
+function cleanText(text) {
+  return tidyText(stripMarkdown(stripHtml(text)));
 }
 
 const PREF_KEY = 'memo.prefs.v1';
