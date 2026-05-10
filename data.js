@@ -2,54 +2,20 @@
 // Texts are kept in sessionStorage (per-tab memory) so newly-added entries
 // survive page navigation but vanish when the tab closes.
 
+// Sample texts ship with the app. The bodies live in samples.js (generated
+// from peri-beni.txt + hobbit.txt) so this file stays readable. samples.js
+// must be loaded before data.js — see <script> order in every HTML page.
 const SAMPLE_TEXTS = [
   {
     id: 'peri-beni',
     title: "Peri Beni Nerelere Götürüyo'",
-    body: `Ya bir öne gel, ya bi' geri git ya da bana bırak hadi, bu nası' bi' beat?
-Bir gün kralsın, bir gün varsın, bir gün yoksun, bazen tok
-Bu nası' bi' gün? Bu yeni bi' gün ve de bana neşe verebilecek bi' gün
-Her gün tekrar doğdum, bazen soğudum, kaçtım kendimden
-Birden fazla yorucu olur, dertler artar, sorunu bulun
-Kimler çözmüş ki bu sorunu? Bizler bulsak da bu soruyu
-Göremiyoruz, çözemiyoruz, bir ileri, iki geri yürüyoruz hep
-Kimler gelmiş geçmiş sırlar var hep| hiç çözülemeyen
-Dünden kalmış ne var acaba? Çok tebrikler bulup alana
-Tam bir yapboz, hayat acımaz, "Yoktur" diyen bunu nasıl göremez?
-Tabii göremez, bakamadı hiç, kafasını çevirip o yere gömer hep
-Birden fazla bundan varsa artık| yandık hep
-İnsanlar insanlıktan çıkmış bazen, gördüm gerçekten
-Sen yok.! zannetsen de gerçek böyle her yerde
-Haykırsan, inletsen de asla duymaz hiç kimse
-Hep anlatsan zannetmem ben duysun kimse bir yerde
-
-Peri beni nerelere götürüyo'?
-Veremedim ara bile, bana bunu getiriyo'
-Geri geri gidiyorum arada bi' sıkılınca
-Adım atamadım, ara tara, hadi beni gelip al
-Dere tepe koşuyorum ara sıra sıkılıp
-Elime de bi' kalem alıp aşıyorum tepe dere
-Deli gibi yürüyorum gece gece, kapa çene
-Hadi bunu hece hece edip gelip al
-
-Neyi bilemedik acaba ve neyi göremedik?
-Adım atamadık, elimize de ne geçmiş?
-Nerelere gelemedik acaba ve nereleri göremedik?
-Ve yanına varamadık hiç
-
-Biri bana desin hadi, bunun sonu nerelere varır?
-"Neyin sonu?", bunu bana soruyorsun
-Ama derin düşünenin külü kalır **geri** meri
-Geri kalan erir, değirmeni çevirmeli mi?
-Hadi bi' de bunu başa alıp okuyalım
-Ya da bunu **boşa** koyup okutalım, bu ne fayda?
-Hele bir de yolu kesenlere bi' yol açın
-Atı bile yarım adım ileride yürüyor
-Kutu gibi dolu kafa beni deli ediyo'
-Ve sonu bile bile geri adım atamadığımız
-Uçuruma gidiyo'sak aman uzak olun
-Geri durun, yasak olan şeyler çok olur`
-  }
+    body: typeof PERI_BENI_TEXT === 'string' ? PERI_BENI_TEXT : '',
+  },
+  {
+    id: 'hobbit',
+    title: 'Hobbit (Resimli) — J. R. R. Tolkien',
+    body: typeof HOBBIT_TEXT === 'string' ? HOBBIT_TEXT : '',
+  },
 ];
 
 const STORE_KEY = 'memo.texts.v1';
