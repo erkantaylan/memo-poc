@@ -298,12 +298,27 @@ body.theme-dark {
 .opt-grid label.checkbox { grid-template-columns: auto 1fr; }
 .opt-grid input[type=range] { width: 100%; }
 .opt-grid select, .opt-grid input[type=text] {
-  background: rgba(0,0,0,0.25);
+  background: var(--bg);
   color: var(--fg);
   border: 1px solid #3a352b;
   border-radius: 4px;
   padding: 0.3rem 0.5rem;
   font-family: inherit;
   width: 100%;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+                    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position: calc(100% - 14px) 50%, calc(100% - 9px) 50%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  padding-right: 1.6rem;
 }
+.opt-grid select:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+.opt-grid option {
+  background: var(--bg);
+  color: var(--fg);
+}
+.opt-grid input[type=range] { accent-color: var(--accent); }
+.opt-grid input[type=checkbox] { accent-color: var(--accent); }
 .opt-grid .val { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 3em; text-align: right; }
