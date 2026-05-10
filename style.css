@@ -104,13 +104,27 @@ button.secondary { background: var(--btn-secondary-bg); color: var(--btn-seconda
 
 /* Pagination */
 .pager {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  color: var(--muted);
+  gap: 0.4rem;
+  padding: 0.2rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card-bg);
   font-size: 0.9rem;
 }
-.pager .page-info { min-width: 7em; text-align: center; }
+.pager button {
+  padding: 0.25rem 0.55rem;
+  font-size: 0.95rem;
+  line-height: 1;
+}
+.pager .page-info {
+  min-width: 8em;
+  text-align: center;
+  color: var(--fg);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
 
 /* menu */
 .menu {
