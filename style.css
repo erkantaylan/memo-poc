@@ -118,7 +118,8 @@ button.secondary { background: var(--btn-secondary-bg); color: var(--btn-seconda
   margin: 3rem auto;
 }
 .menu h1 { font-weight: 300; letter-spacing: 0.5px; margin-bottom: 0.3rem; }
-.menu .subtitle { color: var(--muted); margin-bottom: 2rem; }
+.menu .subtitle { color: var(--muted); margin-bottom: 1.2rem; }
+.menu > .opts { margin: 0 0 2rem 0; max-width: none; }
 
 .text-card {
   padding: 1.1rem 1.3rem;

@@ -49,7 +49,7 @@ function applyReaderStyles(textEl, include) {
   }
 }
 
-function installReaderOptions({ textEl = null, include = [], onChange = () => {}, openByDefault = false } = {}) {
+function installReaderOptions({ textEl = null, include = [], onChange = () => {}, openByDefault = false, anchor = null } = {}) {
   applyReaderTheme();
   if (!include.length) return;
 
@@ -74,8 +74,12 @@ function installReaderOptions({ textEl = null, include = [], onChange = () => {}
   html += '</div>';
   panel.innerHTML = html;
 
-  const header = document.querySelector('header');
-  header.parentNode.insertBefore(panel, header.nextSibling);
+  const anchorEl = anchor || document.querySelector('header');
+  if (anchorEl && anchorEl.parentNode) {
+    anchorEl.parentNode.insertBefore(panel, anchorEl.nextSibling);
+  } else {
+    document.body.insertBefore(panel, document.body.firstChild);
+  }
 
   panel.querySelectorAll('[data-ro]').forEach(el => {
     const key = el.dataset.ro;

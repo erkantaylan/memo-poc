@@ -37,6 +37,12 @@
 <script src="data.js"></script>
 <script src="reader.js"></script>
 <script>
+installReaderOptions({
+  textEl: document.querySelector('.menu'),
+  include: ['font', 'theme', 'size', 'stripMd'],
+  anchor: document.querySelector('.menu .subtitle'),
+});
+
 const listEl = document.getElementById('textList');
 const addBtn = document.getElementById('addBtn');
 const form = document.getElementById('addForm');
