@@ -1,12 +1,12 @@
 {
   "expo": {
     "name": "Memo",
-    "slug": "memo-poc",
+    "slug": "memo",
     "version": "0.1.0",
     "orientation": "portrait",
     "scheme": "memo",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.erkantaylan.memo"
@@ -23,10 +23,18 @@
       "output": "static"
     },
     "plugins": [
-      "expo-router"
+      "expo-router",
+      "@sentry/react-native/expo"
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "ec7d47fa-8e81-4842-ac12-a4690da13447"
+      }
+    },
+    "owner": "etaylan13"
   }
 }
