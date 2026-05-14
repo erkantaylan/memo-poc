@@ -22,6 +22,7 @@ import {
   Progress,
   Bookmark,
 } from '@/data/storage';
+import { pickAndLoadFile, stripMarkdown } from '@/data/loadFile';
 import { countLines, countWords } from '@/data/tokenize';
 
 const MODES: { key: Mode; label: string; diff: string; diffColor: string }[] = [
@@ -53,6 +54,7 @@ export default function HomeScreen() {
   const [showAdd, setShowAdd] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newBody, setNewBody] = useState('');
+  const [loadingFile, setLoadingFile] = useState(false);
 
   const refresh = useCallback(async () => {
     const ts = await loadAllTexts();
@@ -90,6 +92,25 @@ export default function HomeScreen() {
     setNewBody('');
     setShowAdd(false);
     refresh();
+  };
+
+  const onLoadFile = async () => {
+    if (loadingFile) return;
+    setLoadingFile(true);
+    try {
+      const file = await pickAndLoadFile();
+      if (!file) return;
+      if (!newTitle.trim()) setNewTitle(file.title);
+      setNewBody(file.body);
+    } catch (e: any) {
+      Alert.alert('Could not load file', e?.message ?? String(e));
+    } finally {
+      setLoadingFile(false);
+    }
+  };
+
+  const onCleanMarkdown = () => {
+    setNewBody((b) => stripMarkdown(b));
   };
 
   const onDelete = (id: string, title: string) => {
@@ -231,9 +252,29 @@ export default function HomeScreen() {
             value={newTitle}
             onChangeText={setNewTitle}
           />
+          <View style={s.fileRow}>
+            <TouchableOpacity
+              style={[s.fileBtn, loadingFile && { opacity: 0.5 }]}
+              onPress={onLoadFile}
+              disabled={loadingFile}
+            >
+              <Text style={s.fileBtnText}>
+                {loadingFile ? 'Loading…' : '📂 Load .txt / .md / .epub'}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.fileBtnSecondary} onPress={onCleanMarkdown}>
+              <Text style={[s.fileBtnText, { color: colors.fg }]}>✨ Clean MD</Text>
+            </TouchableOpacity>
+          </View>
+          {!!newBody && (
+            <Text style={s.sizeInfo}>
+              {(newBody.match(/\p{L}+/gu) || []).length.toLocaleString()} words ·{' '}
+              {(newBody.length / 1024).toFixed(1)} KB
+            </Text>
+          )}
           <TextInput
             style={[s.input, s.textarea]}
-            placeholder="Paste the text here..."
+            placeholder="Paste text here, or use Load button above for .txt/.md/.epub"
             placeholderTextColor={colors.muted}
             value={newBody}
             onChangeText={setNewBody}
@@ -371,4 +412,26 @@ const s = StyleSheet.create({
   },
   textarea: { minHeight: 140, textAlignVertical: 'top' },
   formRow: { flexDirection: 'row' },
+  fileRow: { flexDirection: 'row', gap: 8, marginBottom: 8 },
+  fileBtn: {
+    backgroundColor: colors.cardInnerBg,
+    borderColor: colors.accent,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 4,
+    flex: 1,
+    alignItems: 'center',
+  },
+  fileBtnSecondary: {
+    backgroundColor: colors.secondaryBg,
+    borderColor: colors.border,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 4,
+    alignItems: 'center',
+  },
+  fileBtnText: { color: colors.accent, fontSize: 13, fontWeight: '600' },
+  sizeInfo: { color: colors.muted, fontSize: 11, marginBottom: 6 },
 });
