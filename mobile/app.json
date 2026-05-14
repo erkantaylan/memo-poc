@@ -23,8 +23,7 @@
       "output": "static"
     },
     "plugins": [
-      "expo-router",
-      "@sentry/react-native/expo"
+      "expo-router"
     ],
     "experiments": {
       "typedRoutes": true
