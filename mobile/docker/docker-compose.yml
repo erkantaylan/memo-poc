@@ -8,6 +8,5 @@ services:
       - ..:/app
       - ../output:/output
       - /app/node_modules
-      - /app/android
     environment:
       - ANDROID_HOME=/sdk

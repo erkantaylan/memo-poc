@@ -4,6 +4,7 @@ dist/
 web-build/
 android/
 ios/
+output/
 *.jks
 *.p8
 *.p12
