@@ -75,7 +75,7 @@ def as_list(payload) -> list:
     if isinstance(payload, list):
         return payload
     if isinstance(payload, dict):
-        for key in ("files", "items", "results", "data"):
+        for key in ("files", "items", "results", "data", "accounts", "entries", "children"):
             value = payload.get(key)
             if isinstance(value, list):
                 return value
@@ -146,9 +146,11 @@ def main():
         print(f"folder:  {FOLDER_NAME} (would be created)")
         folder_id = "<new>"
     else:
-        folder_id = dig_id(gog("drive", "mkdir", FOLDER_NAME))
+        gog("drive", "mkdir", FOLDER_NAME)
+        # Don't trust mkdir's response shape — ask Drive what now exists.
+        folder_id = find_folder()
         if not folder_id:
-            die("could not determine the id of the folder just created")
+            die(f"created {FOLDER_NAME} but cannot find it when listing")
         print(f"folder:  {FOLDER_NAME} ({folder_id}) [created]")
 
     existing = remote_index(folder_id) if folder_id != "<new>" else {}
