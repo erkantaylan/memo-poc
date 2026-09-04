@@ -35,7 +35,6 @@ class ReaderViewModel(
     private val store: LibraryStore,
     private val progress: ReadingProgressStore,
     private val bookmarks: BookmarkStore,
-    private val speed: SpeedStore,
     private val cacheDir: File,
     /** Set when opening from a bookmark, overriding the saved position. */
     private val openAtOffset: Int? = null,
@@ -110,11 +109,8 @@ class ReaderViewModel(
         val offset = para.start + (fraction.coerceIn(0f, 1f) * para.text.length).toInt()
         lastOffset = offset
 
-        tracker?.sample(offset)?.let { (words, millis) ->
-            speed.record(item.id, words, millis)
-            refreshSpeed()
-        }
-        refreshTimeLeft()
+        tracker?.sample(offset)
+        refreshSpeed()
 
         progress.save(
             BookProgress(
@@ -164,10 +160,8 @@ class ReaderViewModel(
 
     /** Closes the current reading segment: backgrounded, or reader closed. */
     fun onPaused() {
-        tracker?.stop()?.let { (words, millis) ->
-            speed.record(item.id, words, millis)
-            refreshSpeed()
-        }
+        tracker?.stop()
+        refreshSpeed()
     }
 
     override fun onCleared() {
@@ -175,24 +169,14 @@ class ReaderViewModel(
         super.onCleared()
     }
 
-    /** Time remaining moves as you read even before a segment closes. */
-    private fun refreshTimeLeft() {
-        val wpm = _state.value.wpm
-        if (wpm <= 0) return
-        val book = _state.value.book
-        val perWord = if (book.wordCount > 0)
-            book.charCount.toDouble() / book.wordCount else 5.5
-        val remaining = (book.charCount - lastOffset).coerceAtLeast(0)
-        _state.update { it.copy(minutesLeft = ((remaining / perWord) / wpm).toLong()) }
-    }
-
+    /** For when a scroll through the pages has polluted the figure. */
     fun resetSpeed() {
-        speed.resetBook(item.id)
+        tracker?.reset()
         refreshSpeed()
     }
 
     private fun refreshSpeed() {
-        val wpm = speed.effectiveWpm(item.id)
+        val wpm = tracker?.wpm() ?: 0
         val book = _state.value.book
         val remainingChars = (book.charCount - lastOffset).coerceAtLeast(0)
         val perWord = if (book.wordCount > 0)

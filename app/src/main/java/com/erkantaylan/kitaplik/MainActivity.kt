@@ -27,7 +27,6 @@ import com.erkantaylan.kitaplik.download.Downloader
 import com.erkantaylan.kitaplik.reader.BookmarkStore
 import com.erkantaylan.kitaplik.reader.ReaderViewModel
 import com.erkantaylan.kitaplik.reader.ReadingProgressStore
-import com.erkantaylan.kitaplik.reader.SpeedStore
 import com.erkantaylan.kitaplik.storage.LibraryStore
 import com.erkantaylan.kitaplik.ui.AppShell
 import com.erkantaylan.kitaplik.ui.CatalogScreen
@@ -55,7 +54,6 @@ class MainActivity : ComponentActivity() {
         val store = LibraryStore(File(filesDir, "library"))
         val progress = ReadingProgressStore(this)
         val bookmarks = BookmarkStore(this)
-        val speed = SpeedStore(this)
         val textCache = File(cacheDir, "text")
 
         setContent {
@@ -111,7 +109,7 @@ class MainActivity : ComponentActivity() {
                             factory = viewModelFactory {
                                 initializer {
                                     ReaderViewModel(item, store, progress, bookmarks,
-                                                    speed, textCache, offset)
+                                                    textCache, offset)
                                 }
                             },
                         )
@@ -126,7 +124,6 @@ class MainActivity : ComponentActivity() {
                                     inProgress = progress.inProgress(),
                                     recent = progress.recent(),
                                     bookmarks = bookmarks.recent(),
-                                    wpmFor = { speed.effectiveWpm(it) },
                                     onOpen = { id ->
                                         catalogItems.firstOrNull { it.id == id }
                                             ?.let { reading = it to null }
@@ -145,7 +142,6 @@ class MainActivity : ComponentActivity() {
                             Tab.SETTINGS -> SettingsScreen(
                                 viewModel = vm,
                                 sourceLabel = source.name.uppercase(),
-                                speed = speed,
                                 onDisconnect = { credentials.clear(); mode = Mode.UNSET },
                             )
                         }

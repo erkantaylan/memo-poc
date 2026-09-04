@@ -26,7 +26,6 @@ import com.erkantaylan.kitaplik.ui.theme.Palette
 fun SettingsScreen(
     viewModel: CatalogViewModel,
     sourceLabel: String,
-    speed: com.erkantaylan.kitaplik.reader.SpeedStore,
     onDisconnect: () -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -45,49 +44,6 @@ fun SettingsScreen(
             state.catalog?.let {
                 Field("Total size", formatBytes(state.totalBytes))
             }
-        }
-
-        SectionLabel("Reading speed")
-        var overall by androidx.compose.runtime.remember {
-            androidx.compose.runtime.mutableStateOf(speed.overall())
-        }
-        var books by androidx.compose.runtime.remember {
-            androidx.compose.runtime.mutableStateOf(speed.booksTracked())
-        }
-        val context = androidx.compose.ui.platform.LocalContext.current
-        Panel {
-            if (overall.confident) {
-                Field("Your average", "${overall.wpm} wpm")
-                Field("Time read", com.erkantaylan.kitaplik.reader
-                    .formatDuration(overall.minutesRead))
-                Field("Books measured", "$books")
-            } else {
-                Text(
-                    "Not enough reading yet to quote a number. Speed is measured " +
-                        "while you read and ignores time spent scrolling, paused " +
-                        "or away from the app.",
-                    color = Palette.textDim,
-                    fontSize = 12.5.sp,
-                    lineHeight = 18.sp,
-                )
-            }
-            Text(
-                "Reset all measurements",
-                color = Palette.danger,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier
-                    .padding(top = 14.dp)
-                    .testTagged("reset_speed")
-                    .clickableNoRipple {
-                        speed.resetAll()
-                        overall = speed.overall()
-                        books = speed.booksTracked()
-                        android.widget.Toast.makeText(
-                            context, "Reading speed reset",
-                            android.widget.Toast.LENGTH_SHORT).show()
-                    },
-            )
         }
 
         SectionLabel("Drive")

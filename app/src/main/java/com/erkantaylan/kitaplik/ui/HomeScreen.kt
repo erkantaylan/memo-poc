@@ -33,7 +33,6 @@ fun HomeScreen(
     inProgress: List<com.erkantaylan.kitaplik.reader.BookProgress>,
     recent: List<com.erkantaylan.kitaplik.reader.BookProgress>,
     bookmarks: List<com.erkantaylan.kitaplik.reader.Bookmark>,
-    wpmFor: (String) -> Int,
     onOpen: (String) -> Unit,
     onOpenBookmark: (com.erkantaylan.kitaplik.reader.Bookmark) -> Unit,
     onRemoveBookmark: (String) -> Unit,
@@ -54,7 +53,7 @@ fun HomeScreen(
                 "Open a book and it will wait for you here, at the line you left."
             )
         } else {
-            inProgress.forEach { ProgressRow(it, onOpen, wpm = wpmFor(it.itemId)) }
+            inProgress.forEach { ProgressRow(it, onOpen) }
         }
 
         SectionLabel("Recently opened")
@@ -64,7 +63,7 @@ fun HomeScreen(
                 "Books you have opened appear here, newest first."
             )
         } else {
-            recent.forEach { ProgressRow(it, onOpen, showBar = false, wpm = 0) }
+            recent.forEach { ProgressRow(it, onOpen, showBar = false) }
         }
 
         SectionLabel("Bookmarks")
@@ -165,7 +164,6 @@ private fun ProgressRow(
     progress: com.erkantaylan.kitaplik.reader.BookProgress,
     onOpen: (String) -> Unit,
     showBar: Boolean = true,
-    wpm: Int = 0,
 ) {
     Column(
         Modifier
@@ -193,25 +191,12 @@ private fun ProgressRow(
                 gapSize = 0.dp,
                 modifier = Modifier.fillMaxWidth().padding(top = 7.dp),
             )
-            Row(
-                Modifier.fillMaxWidth().padding(top = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text(
-                    "${(progress.fraction * 100).toInt()}%",
-                    color = Palette.textDim,
-                    fontSize = 11.sp,
-                )
-                if (wpm > 0 && progress.charCount > 0) {
-                    val remaining = progress.charCount - progress.charOffset
-                    val minutes = ((remaining / 5.5) / wpm).toLong()
-                    Text(
-                        "$wpm wpm · ${com.erkantaylan.kitaplik.reader.formatDuration(minutes)} left",
-                        color = Palette.accent,
-                        fontSize = 11.sp,
-                    )
-                }
-            }
+            Text(
+                "${(progress.fraction * 100).toInt()}%",
+                color = Palette.textDim,
+                fontSize = 11.sp,
+                modifier = Modifier.padding(top = 4.dp),
+            )
         }
     }
 }
