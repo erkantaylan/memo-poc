@@ -21,6 +21,10 @@ data class ReaderUiState(
     /** How far into that paragraph the saved position sat, 0..1. */
     val startFraction: Float = 0f,
     val fontScale: Float = 1f,
+    /** Measured words per minute, 0 while there is not enough evidence. */
+    val wpm: Int = 0,
+    /** Minutes of reading left in this book at that speed, null if unknown. */
+    val minutesLeft: Long? = null,
     val markedParagraphs: Set<Int> = emptySet(),
     val bookmarks: List<Bookmark> = emptyList(),
     val showBookmarks: Boolean = false,
@@ -31,6 +35,7 @@ class ReaderViewModel(
     private val store: LibraryStore,
     private val progress: ReadingProgressStore,
     private val bookmarks: BookmarkStore,
+    private val speed: SpeedStore,
     private val cacheDir: File,
     /** Set when opening from a bookmark, overriding the saved position. */
     private val openAtOffset: Int? = null,
@@ -38,6 +43,9 @@ class ReaderViewModel(
 
     private val _state = MutableStateFlow(ReaderUiState())
     val state: StateFlow<ReaderUiState> = _state.asStateFlow()
+
+    private var tracker: SpeedTracker? = null
+    private var lastOffset = 0
 
     val title: String = item.title
     val author: String = item.author
@@ -73,6 +81,13 @@ class ReaderViewModel(
                             bookmarks = bookmarks.forBook(item.id),
                         )
                     }
+                    // Characters per word differs per book — Turkish runs
+                    // longer than English — so derive it rather than assume.
+                    val perWord = if (book.wordCount > 0)
+                        book.charCount.toDouble() / book.wordCount else 5.5
+                    tracker = SpeedTracker(perWord)
+                    lastOffset = saved
+                    refreshSpeed()
                 }
                 .onFailure { t ->
                     _state.update {
@@ -93,6 +108,14 @@ class ReaderViewModel(
         val book = _state.value.book
         val para = book.paragraphs.getOrNull(index) ?: return
         val offset = para.start + (fraction.coerceIn(0f, 1f) * para.text.length).toInt()
+        lastOffset = offset
+
+        tracker?.sample(offset)?.let { (words, millis) ->
+            speed.record(item.id, words, millis)
+            refreshSpeed()
+        }
+        refreshTimeLeft()
+
         progress.save(
             BookProgress(
                 itemId = item.id,
@@ -137,6 +160,46 @@ class ReaderViewModel(
         _state.update {
             it.copy(bookmarks = list, markedParagraphs = list.map { b -> b.paragraphIndex }.toSet())
         }
+    }
+
+    /** Closes the current reading segment: backgrounded, or reader closed. */
+    fun onPaused() {
+        tracker?.stop()?.let { (words, millis) ->
+            speed.record(item.id, words, millis)
+            refreshSpeed()
+        }
+    }
+
+    override fun onCleared() {
+        onPaused()
+        super.onCleared()
+    }
+
+    /** Time remaining moves as you read even before a segment closes. */
+    private fun refreshTimeLeft() {
+        val wpm = _state.value.wpm
+        if (wpm <= 0) return
+        val book = _state.value.book
+        val perWord = if (book.wordCount > 0)
+            book.charCount.toDouble() / book.wordCount else 5.5
+        val remaining = (book.charCount - lastOffset).coerceAtLeast(0)
+        _state.update { it.copy(minutesLeft = ((remaining / perWord) / wpm).toLong()) }
+    }
+
+    fun resetSpeed() {
+        speed.resetBook(item.id)
+        refreshSpeed()
+    }
+
+    private fun refreshSpeed() {
+        val wpm = speed.effectiveWpm(item.id)
+        val book = _state.value.book
+        val remainingChars = (book.charCount - lastOffset).coerceAtLeast(0)
+        val perWord = if (book.wordCount > 0)
+            book.charCount.toDouble() / book.wordCount else 5.5
+        val minutes = if (wpm > 0 && book.charCount > 0)
+            ((remainingChars / perWord) / wpm).toLong() else null
+        _state.update { it.copy(wpm = wpm, minutesLeft = minutes) }
     }
 
     fun adjustFont(delta: Float) {

@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.erkantaylan.kitaplik.reader.ReaderViewModel
+import com.erkantaylan.kitaplik.reader.formatDuration
 import com.erkantaylan.kitaplik.ui.theme.Palette
 import android.widget.Toast
 import androidx.compose.ui.platform.LocalContext
@@ -58,7 +59,22 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
     val context = LocalContext.current
-    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+
+    // A reading segment ends when the app goes to the background OR when the
+    // reader is closed. The view model is keyed on the book and outlives this
+    // screen, so leaving composition has to close the segment explicitly —
+    // otherwise a session only counts if you background the whole app.
+    androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_PAUSE) viewModel.onPaused()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            viewModel.onPaused()
+        }
+    }
 
     // Restore the saved position once the text has been extracted.
     LaunchedEffect(state.startParagraph, state.loading) {
@@ -108,7 +124,14 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
         ReaderBar(
             title = viewModel.title,
             author = viewModel.author,
+            wpm = state.wpm,
+            minutesLeft = state.minutesLeft,
             bookmarkCount = state.bookmarks.size,
+            onResetSpeed = {
+                viewModel.resetSpeed()
+                Toast.makeText(context, "Reading speed reset for this book",
+                               Toast.LENGTH_SHORT).show()
+            },
             onBack = onBack,
             onBookmarks = { viewModel.setBookmarksVisible(!state.showBookmarks) },
             onSmaller = { viewModel.adjustFont(-0.1f) },
@@ -184,7 +207,10 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
 private fun ReaderBar(
     title: String,
     author: String,
+    wpm: Int,
+    minutesLeft: Long?,
     bookmarkCount: Int,
+    onResetSpeed: () -> Unit,
     onBack: () -> Unit,
     onBookmarks: () -> Unit,
     onSmaller: () -> Unit,
@@ -207,10 +233,28 @@ private fun ReaderBar(
                 .clickableNoRipple(onBack)
                 .padding(horizontal = 10.dp),
         )
-        Column(Modifier.weight(1f).padding(horizontal = 6.dp)) {
+        Column(
+            Modifier
+                .weight(1f)
+                .padding(horizontal = 6.dp)
+                .testTag("reader_stats")
+                // Long-press clears this book's measurement, for when a fast
+                // scroll through the pages has polluted it.
+                .combinedClickable(onClick = {}, onLongClick = onResetSpeed),
+        ) {
             Text(title, color = Palette.text, fontSize = 14.sp, maxLines = 1)
-            if (author.isNotBlank()) {
-                Text(author, color = Palette.textDim, fontSize = 11.5.sp, maxLines = 1)
+            val line = buildList {
+                if (author.isNotBlank()) add(author)
+                if (wpm > 0) add("$wpm wpm")
+                if (minutesLeft != null) add("${formatDuration(minutesLeft)} left")
+            }.joinToString(" · ")
+            if (line.isNotBlank()) {
+                Text(
+                    line,
+                    color = if (wpm > 0) Palette.accent else Palette.textDim,
+                    fontSize = 11.5.sp,
+                    maxLines = 1,
+                )
             }
         }
         Text(
