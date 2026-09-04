@@ -8,10 +8,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -53,7 +51,6 @@ fun AppShell(
             Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .statusBarsPadding()
         ) { content() }
 
         TabBar(selected, onSelect)
@@ -76,8 +73,7 @@ private fun TabBar(selected: Tab, onSelect: (Tab) -> Unit) {
         Row(
             Modifier
                 .fillMaxWidth()
-                .navigationBarsPadding()
-                .padding(top = 8.dp, bottom = 8.dp),
+                .padding(vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
         ) {
             Tab.entries.forEach { tab ->

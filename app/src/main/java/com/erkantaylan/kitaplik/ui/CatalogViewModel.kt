@@ -40,6 +40,7 @@ data class CatalogUiState(
                 .filter {
                     needle.isEmpty() ||
                         it.title.lowercase().contains(needle) ||
+                        it.author.lowercase().contains(needle) ||
                         it.category.lowercase().contains(needle)
                 }
                 .groupBy { it.category }

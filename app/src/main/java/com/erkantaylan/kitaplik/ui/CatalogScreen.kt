@@ -58,6 +58,7 @@ fun CatalogScreen(
     viewModel: CatalogViewModel,
     title: String = "KİTAPLIK",
     onlyDownloaded: Boolean = false,
+    onOpen: (LibraryItem) -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -125,7 +126,8 @@ fun CatalogScreen(
                                 item = item,
                                 downloadState = state.downloadStateOf(item),
                                 onTap = {
-                                    onItemTap(context, viewModel, item, state.downloadStateOf(item))
+                                    onItemTap(context, viewModel, item,
+                                              state.downloadStateOf(item), onOpen)
                                 },
                                 onLongPress = { viewModel.delete(item) },
                             )
@@ -187,7 +189,7 @@ private fun SearchField(value: String, onValueChange: (String) -> Unit) {
             .padding(horizontal = 12.dp, vertical = 10.dp)
     ) {
         if (value.isEmpty()) {
-            Text("Search title or category", color = Palette.textDim, fontSize = 14.sp)
+            Text("Search title, author or shelf", color = Palette.textDim, fontSize = 14.sp)
         }
         BasicTextField(
             value = value,
@@ -263,6 +265,7 @@ private fun onItemTap(
     viewModel: CatalogViewModel,
     item: LibraryItem,
     downloadState: DownloadState,
+    onOpen: (LibraryItem) -> Unit,
 ) {
     when (downloadState) {
         is DownloadState.InProgress -> viewModel.cancel(item)
@@ -278,11 +281,11 @@ private fun onItemTap(
                     ).show()
                 }
             }
-            // EPUB and markdown get an in-app reader; not built yet.
+            // EPUB and markdown are read in the app.
+            ItemKind.EPUB, ItemKind.MARKDOWN -> onOpen(item)
+
             else -> Toast.makeText(
-                context,
-                "${item.kind.label} reader not built yet — long press to delete",
-                Toast.LENGTH_SHORT,
+                context, "Cannot open a ${item.kind.label} file", Toast.LENGTH_SHORT
             ).show()
         }
     }
@@ -377,7 +380,8 @@ private fun MetaRow(item: LibraryItem, downloadState: DownloadState) {
             is DownloadState.Done -> {
                 MetaSeparator()
                 Text(
-                    if (item.kind == ItemKind.PDF) "on device · tap to open" else "on device",
+                    "on device · tap to " +
+                        if (item.kind == ItemKind.PDF) "open externally" else "read",
                     color = Palette.epubText,
                     fontSize = 11.sp,
                 )

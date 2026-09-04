@@ -27,7 +27,12 @@ import com.erkantaylan.kitaplik.ui.theme.Palette
  * honest empty state rather than invented rows.
  */
 @Composable
-fun HomeScreen(onBrowse: () -> Unit) {
+fun HomeScreen(
+    inProgress: List<com.erkantaylan.kitaplik.reader.BookProgress>,
+    recent: List<com.erkantaylan.kitaplik.reader.BookProgress>,
+    onOpen: (String) -> Unit,
+    onBrowse: () -> Unit,
+) {
     Column(
         Modifier
             .fillMaxSize()
@@ -36,16 +41,24 @@ fun HomeScreen(onBrowse: () -> Unit) {
         ScreenTitle("KİTAPLIK")
 
         SectionLabel("Currently reading")
-        Placeholder(
-            "Nothing open yet.",
-            "Open a book and it will wait for you here, at the page you left."
-        )
+        if (inProgress.isEmpty()) {
+            Placeholder(
+                "Nothing open yet.",
+                "Open a book and it will wait for you here, at the line you left."
+            )
+        } else {
+            inProgress.forEach { ProgressRow(it, onOpen) }
+        }
 
         SectionLabel("Recently opened")
-        Placeholder(
-            "No history yet.",
-            "Books you have opened appear here, newest first."
-        )
+        if (recent.isEmpty()) {
+            Placeholder(
+                "No history yet.",
+                "Books you have opened appear here, newest first."
+            )
+        } else {
+            recent.forEach { ProgressRow(it, onOpen, showBar = false) }
+        }
 
         Box(Modifier.fillMaxWidth().padding(16.dp)) {
             Text(
@@ -58,6 +71,48 @@ fun HomeScreen(onBrowse: () -> Unit) {
                     .clip(RoundedCornerShape(8.dp))
                     .clickableNoRipple(onBrowse)
                     .padding(vertical = 10.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun ProgressRow(
+    progress: com.erkantaylan.kitaplik.reader.BookProgress,
+    onOpen: (String) -> Unit,
+    showBar: Boolean = true,
+) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .padding(bottom = 8.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(Palette.panel)
+            .border(1.dp, Palette.border, RoundedCornerShape(10.dp))
+            .testTagged("progress:${progress.itemId}")
+            .clickableNoRipple { onOpen(progress.itemId) }
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
+        Text(progress.title, color = Palette.text, fontSize = 15.sp, lineHeight = 20.sp)
+        if (progress.author.isNotBlank()) {
+            Text(progress.author, color = Palette.textDim, fontSize = 12.5.sp)
+        }
+        if (showBar) {
+            androidx.compose.material3.LinearProgressIndicator(
+                progress = { progress.fraction },
+                color = Palette.accent,
+                trackColor = Palette.panel2,
+                drawStopIndicator = {},
+                gapSize = 0.dp,
+                modifier = Modifier.fillMaxWidth().padding(top = 7.dp),
+            )
+            Text(
+                "${(progress.fraction * 100).toInt()}%",
+                color = Palette.textDim,
+                fontSize = 11.sp,
+                modifier = Modifier.padding(top = 4.dp),
             )
         }
     }
