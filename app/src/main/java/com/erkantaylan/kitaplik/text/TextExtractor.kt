@@ -134,8 +134,31 @@ object TextExtractor {
 
     private val FRONT_MATTER = Regex("""\A---\r?\n.*?\r?\n---\r?\n""", RegexOption.DOT_MATCHES_ALL)
 
+    /*
+     * markit stamps its own metadata block into markdown converted from EPUB:
+     *
+     *     **Title:** ...
+     *     **Authors:** ...
+     *     **Language:** ...
+     *     <blank line>
+     *
+     * Three constraints keep this from eating prose. It is anchored to the
+     * very start, it must open with **Title:** specifically, and every line
+     * must match a closed list of keys. Books legitimately contain bold
+     * key-value lines mid-text — "**Scene:** A man and a woman...", a
+     * publisher's credits page — and a looser rule deletes them.
+     */
+    private val MARKIT_HEADER = Regex(
+        """\A[ \t]*(?:\r?\n)*""" +
+            """\*\*Title:\*\*[^\r\n]*\r?\n""" +
+            """(?:\*\*(?:Authors?|Language|Publisher|Date|Description|Subject|""" +
+            """Series|Rights|Tags|Identifiers?):\*\*[^\r\n]*\r?\n)*""" +
+            """(?:[ \t]*\r?\n|${'$'})"""
+    )
+
     fun fromMarkdown(raw: String): String {
-        var text = FRONT_MATTER.replace(raw, "")          // metadata, not prose
+        var text = FRONT_MATTER.replace(raw, "")          // our metadata
+        text = MARKIT_HEADER.replace(text, "")            // the converter's
         text = text
             .replace(Regex("(?s)```.*?```"), "")
             .replace(Regex("`([^`]+)`"), "$1")
