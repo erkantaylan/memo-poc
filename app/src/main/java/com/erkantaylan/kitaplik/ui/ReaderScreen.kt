@@ -120,7 +120,7 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                 items(state.book.paragraphs, key = { it.index }) { paragraph ->
                     Text(
                         paragraph.text,
-                        color = Palette.text,
+                        color = Palette.readerText,
                         fontSize = (17 * state.fontScale).sp,
                         lineHeight = (28 * state.fontScale).sp,
                         fontFamily = FontFamily.Serif,

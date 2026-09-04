@@ -5,12 +5,12 @@
     android:viewportHeight="108">
     <!-- An open book, centred inside the adaptive-icon safe zone. -->
     <path
-        android:fillColor="#6DB1FF"
+        android:fillColor="#D99E5A"
         android:pathData="M30,36 L52,41 L52,74 L30,69 Z" />
     <path
-        android:fillColor="#A8D0FF"
+        android:fillColor="#E8C79A"
         android:pathData="M78,36 L56,41 L56,74 L78,69 Z" />
     <path
-        android:fillColor="#D6DBE2"
+        android:fillColor="#D8CFB8"
         android:pathData="M52,41 L54,41.5 L56,41 L56,74 L54,73.5 L52,74 Z" />
 </vector>
