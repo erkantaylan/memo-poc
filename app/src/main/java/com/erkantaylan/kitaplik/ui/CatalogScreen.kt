@@ -30,7 +30,11 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -45,6 +49,7 @@ import com.erkantaylan.kitaplik.ui.theme.Palette
 import com.erkantaylan.kitaplik.ui.theme.formatColor
 import com.erkantaylan.kitaplik.ui.theme.formatTextColor
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun CatalogScreen(viewModel: CatalogViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -54,6 +59,7 @@ fun CatalogScreen(viewModel: CatalogViewModel) {
         Modifier
             .fillMaxSize()
             .background(Palette.bg)
+            .semantics { testTagsAsResourceId = true }
     ) {
         Header(
             shown = state.shownCount,
@@ -149,7 +155,9 @@ private fun SearchField(value: String, onValueChange: (String) -> Unit) {
             singleLine = true,
             textStyle = TextStyle(color = Palette.text, fontSize = 14.sp),
             cursorBrush = SolidColor(Palette.accent),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("search"),
         )
     }
 }
@@ -176,6 +184,7 @@ private fun FormatFilterRow(
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 0.6.sp,
                 modifier = Modifier
+                    .testTag("filter:$format")
                     .clip(RoundedCornerShape(6.dp))
                     .background(if (selected) formatColor(format) else Palette.panel)
                     .border(
@@ -252,6 +261,7 @@ private fun ItemRow(
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
             .padding(bottom = 8.dp)
+            .testTag("item:${item.id}")
             .clip(RoundedCornerShape(10.dp))
             .background(Palette.panel)
             .border(1.dp, Palette.border, RoundedCornerShape(10.dp))
