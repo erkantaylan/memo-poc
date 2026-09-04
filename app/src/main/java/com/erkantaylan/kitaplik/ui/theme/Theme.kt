@@ -31,6 +31,9 @@ object Palette {
     /** Body text sits a touch below UI text — long passages read softer. */
     val readerText = Color(0xFFD2C8B0)
 
+    /** Behind a bookmarked word: present, but not shouting. */
+    val bookmark = Color(0xFF4A3B22)
+
     // Chip / badge fills, desaturated so they sit inside the warm ground.
     val epub = Color(0xFF4A6448)
     val md = Color(0xFF57506E)

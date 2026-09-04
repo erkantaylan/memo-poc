@@ -119,11 +119,19 @@ private fun BookmarkRow(
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(5.dp),
     ) {
+        if (mark.word.isNotBlank()) {
+            Text(
+                mark.word,
+                color = Palette.accent,
+                fontSize = 15.sp,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+            )
+        }
         Text(
             "\u201C${mark.preview}\u201D",
             color = Palette.text,
-            fontSize = 14.sp,
-            lineHeight = 20.sp,
+            fontSize = 13.5.sp,
+            lineHeight = 19.sp,
             maxLines = 3,
         )
         Row(

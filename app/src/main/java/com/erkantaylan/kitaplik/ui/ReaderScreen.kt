@@ -9,8 +9,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -20,6 +21,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -60,6 +63,19 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
     val listState = rememberLazyListState()
     val context = LocalContext.current
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+
+    // The figure is only recomputed when the position changes, which means it
+    // is calculated the instant you arrive at a new screen — crediting the
+    // words you just scrolled past before the time you are about to spend
+    // reading them. Ticking here lets the elapsed time catch up while you sit
+    // still, which is most of a reading session.
+    LaunchedEffect(state.loading) {
+        if (state.loading) return@LaunchedEffect
+        while (true) {
+            kotlinx.coroutines.delay(5_000)
+            viewModel.onTick()
+        }
+    }
 
     // A reading segment ends when the app goes to the background OR when the
     // reader is closed. The view model is keyed on the book and outlives this
@@ -171,30 +187,63 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 items(state.book.paragraphs, key = { it.index }) { paragraph ->
-                    val marked = paragraph.index in state.markedParagraphs
+                    val marks = state.bookmarks.filter { it.paragraphIndex == paragraph.index }
+
+                    // Highlight each marked word rather than the whole block.
+                    val rendered = androidx.compose.runtime.remember(paragraph.text, marks) {
+                        if (marks.isEmpty()) {
+                            androidx.compose.ui.text.AnnotatedString(paragraph.text)
+                        } else {
+                            androidx.compose.ui.text.buildAnnotatedString {
+                                append(paragraph.text)
+                                marks.forEach { mark ->
+                                    val from = (mark.charOffset - paragraph.start)
+                                        .coerceIn(0, paragraph.text.length)
+                                    val to = (from + maxOf(mark.wordLength, 1))
+                                        .coerceIn(from, paragraph.text.length)
+                                    addStyle(
+                                        androidx.compose.ui.text.SpanStyle(
+                                            background = Palette.bookmark,
+                                            color = Palette.text,
+                                        ),
+                                        from, to,
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    var layout by androidx.compose.runtime.remember(paragraph.index) {
+                        androidx.compose.runtime.mutableStateOf<
+                            androidx.compose.ui.text.TextLayoutResult?>(null)
+                    }
+
                     Text(
-                        paragraph.text,
+                        rendered,
                         color = Palette.readerText,
                         fontSize = (17 * state.fontScale).sp,
                         lineHeight = (28 * state.fontScale).sp,
                         fontFamily = FontFamily.Serif,
+                        onTextLayout = { layout = it },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(6.dp))
-                            .then(
-                                if (marked) Modifier.background(Palette.panel) else Modifier
-                            )
-                            .combinedClickable(
-                                onClick = {},
-                                onLongClick = {
-                                    val added = viewModel.toggleBookmark(paragraph.index)
-                                    Toast.makeText(
-                                        context,
-                                        if (added) "Bookmarked" else "Bookmark removed",
-                                        Toast.LENGTH_SHORT,
-                                    ).show()
-                                },
-                            )
+                            .pointerInput(paragraph.index, layout) {
+                                detectTapGestures(
+                                    onLongPress = { position ->
+                                        // Map the touch to a character, so the
+                                        // mark lands on the word under the finger.
+                                        val result = layout ?: return@detectTapGestures
+                                        val index = result.getOffsetForPosition(position)
+                                        val added =
+                                            viewModel.toggleBookmarkAt(paragraph.index, index)
+                                        Toast.makeText(
+                                            context,
+                                            if (added) "Bookmarked" else "Bookmark removed",
+                                            Toast.LENGTH_SHORT,
+                                        ).show()
+                                    },
+                                )
+                            }
                             .padding(horizontal = 6.dp, vertical = 3.dp),
                     )
                 }

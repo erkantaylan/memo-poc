@@ -124,23 +124,52 @@ class ReaderViewModel(
         )
     }
 
-    /** Long-press on a paragraph marks or unmarks it. Returns true if added. */
-    fun toggleBookmark(paragraphIndex: Int): Boolean {
+    /**
+     * Long-press marks the word under the finger. [indexInParagraph] is the
+     * character the touch landed on, which is expanded to the whole word so
+     * the mark lands on something meaningful rather than mid-syllable.
+     */
+    fun toggleBookmarkAt(paragraphIndex: Int, indexInParagraph: Int): Boolean {
         val para = _state.value.book.paragraphs.getOrNull(paragraphIndex) ?: return false
+        val (wordStart, wordEnd) = wordBoundsAt(para.text, indexInParagraph)
+        val word = para.text.substring(wordStart, wordEnd)
+
         val added = bookmarks.toggle(
             Bookmark(
                 id = newBookmarkId(),
                 itemId = item.id,
                 bookTitle = item.title,
                 author = item.author,
-                charOffset = para.start,
+                charOffset = para.start + wordStart,
                 paragraphIndex = paragraphIndex,
-                preview = para.text.take(140).replace(Regex("\\s+"), " ").trim(),
+                wordLength = wordEnd - wordStart,
+                word = word,
+                // The word alone is a poor label in a list, so keep the run of
+                // text around it as context.
+                preview = para.text
+                    .substring(maxOf(0, wordStart - 40), minOf(para.text.length, wordStart + 120))
+                    .replace(Regex("\\s+"), " ")
+                    .trim(),
                 createdAt = System.currentTimeMillis(),
             )
         )
         refreshBookmarks()
         return added
+    }
+
+    /** Expands a character index out to the word containing it. */
+    private fun wordBoundsAt(text: String, index: Int): Pair<Int, Int> {
+        if (text.isEmpty()) return 0 to 0
+        val i = index.coerceIn(0, text.length - 1)
+        if (!text[i].isLetterOrDigit()) {
+            // Landed on a space or punctuation: mark just that character.
+            return i to (i + 1)
+        }
+        var start = i
+        while (start > 0 && text[start - 1].isLetterOrDigit()) start--
+        var end = i + 1
+        while (end < text.length && text[end].isLetterOrDigit()) end++
+        return start to end
     }
 
     fun removeBookmark(id: String) {
@@ -168,6 +197,9 @@ class ReaderViewModel(
         onPaused()
         super.onCleared()
     }
+
+    /** Recomputes the speed as time passes, not only as the position moves. */
+    fun onTick() = refreshSpeed()
 
     /** For when a scroll through the pages has polluted the figure. */
     fun resetSpeed() {

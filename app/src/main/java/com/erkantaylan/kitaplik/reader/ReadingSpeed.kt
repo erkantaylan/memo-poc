@@ -102,9 +102,16 @@ class SpeedTracker(private val charsPerWord: Double) {
     private companion object {
         const val MIN_SEGMENT_MS = 15_000L
         const val IDLE_MS = 90_000L
-        /** Below this the figure is mostly noise, so show nothing. */
-        const val MIN_VISIBLE_MS = 25_000L
-        const val MIN_VISIBLE_WORDS = 80L
+
+        /*
+         * Reading a screen and then scrolling means the position jumps ahead
+         * of the eye by up to a screenful. Averaged over a couple of minutes
+         * that is noise; over twenty seconds it is most of the measurement.
+         * So no figure is shown until a session has run long enough for the
+         * lead to amortise.
+         */
+        const val MIN_VISIBLE_MS = 90_000L
+        const val MIN_VISIBLE_WORDS = 200L
         const val MIN_WPM = 50L
         const val MAX_WPM = 1_200L
     }

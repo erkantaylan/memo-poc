@@ -24,6 +24,10 @@ data class Bookmark(
     val author: String = "",
     val charOffset: Int,
     val paragraphIndex: Int,
+    /** Length of the marked word, so it can be highlighted again on reopen. */
+    val wordLength: Int = 0,
+    /** The marked word on its own, for a compact label. */
+    val word: String = "",
     val preview: String,
     val note: String = "",
     val createdAt: Long,
@@ -51,13 +55,16 @@ class BookmarkStore(context: Context) {
 
     fun remove(id: String) = write(all().filterNot { it.id == id })
 
-    /** True if a bookmark already sits on this paragraph. */
-    fun isMarked(itemId: String, paragraphIndex: Int): Boolean =
-        all().any { it.itemId == itemId && it.paragraphIndex == paragraphIndex }
-
+    /**
+     * Adds the bookmark, or removes the one already covering that word.
+     * Matching is by character range rather than by paragraph, so a long
+     * paragraph can hold several marks.
+     */
     fun toggle(bookmark: Bookmark): Boolean {
         val existing = all().firstOrNull {
-            it.itemId == bookmark.itemId && it.paragraphIndex == bookmark.paragraphIndex
+            it.itemId == bookmark.itemId &&
+                bookmark.charOffset < it.charOffset + maxOf(it.wordLength, 1) &&
+                it.charOffset < bookmark.charOffset + maxOf(bookmark.wordLength, 1)
         }
         return if (existing != null) {
             remove(existing.id); false
