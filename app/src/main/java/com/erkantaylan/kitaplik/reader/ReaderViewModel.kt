@@ -23,6 +23,8 @@ data class ReaderUiState(
     val fontScale: Float = 1f,
     /** Measured words per minute, 0 while there is not enough evidence. */
     val wpm: Int = 0,
+    /** True while that figure is an early estimate rather than settled. */
+    val wpmProvisional: Boolean = true,
     /** Minutes of reading left in this book at that speed, null if unknown. */
     val minutesLeft: Long? = null,
     val markedParagraphs: Set<Int> = emptySet(),
@@ -209,13 +211,16 @@ class ReaderViewModel(
 
     private fun refreshSpeed() {
         val wpm = tracker?.wpm() ?: 0
+        val provisional = tracker?.isProvisional() ?: true
         val book = _state.value.book
         val remainingChars = (book.charCount - lastOffset).coerceAtLeast(0)
         val perWord = if (book.wordCount > 0)
             book.charCount.toDouble() / book.wordCount else 5.5
         val minutes = if (wpm > 0 && book.charCount > 0)
             ((remainingChars / perWord) / wpm).toLong() else null
-        _state.update { it.copy(wpm = wpm, minutesLeft = minutes) }
+        _state.update {
+            it.copy(wpm = wpm, wpmProvisional = provisional, minutesLeft = minutes)
+        }
     }
 
     fun adjustFont(delta: Float) {

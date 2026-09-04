@@ -141,6 +141,7 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
             title = viewModel.title,
             author = viewModel.author,
             wpm = state.wpm,
+            wpmProvisional = state.wpmProvisional,
             minutesLeft = state.minutesLeft,
             bookmarkCount = state.bookmarks.size,
             onResetSpeed = {
@@ -257,6 +258,7 @@ private fun ReaderBar(
     title: String,
     author: String,
     wpm: Int,
+    wpmProvisional: Boolean,
     minutesLeft: Long?,
     bookmarkCount: Int,
     onResetSpeed: () -> Unit,
@@ -294,7 +296,7 @@ private fun ReaderBar(
             Text(title, color = Palette.text, fontSize = 14.sp, maxLines = 1)
             val line = buildList {
                 if (author.isNotBlank()) add(author)
-                if (wpm > 0) add("$wpm wpm")
+                if (wpm > 0) add(if (wpmProvisional) "~$wpm wpm" else "$wpm wpm")
                 if (minutesLeft != null) add("${formatDuration(minutesLeft)} left")
             }.joinToString(" · ")
             if (line.isNotBlank()) {

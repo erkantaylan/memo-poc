@@ -59,7 +59,12 @@ class SpeedTracker(private val charsPerWord: Double) {
      * Words per minute so far, including the segment still in progress so the
      * figure moves while you read. Zero until there is enough to mean anything.
      */
-    fun wpm(now: Long = System.currentTimeMillis()): Int {
+    fun wpm(now: Long = System.currentTimeMillis()): Int = measure(now).first
+
+    /** True while the figure is still an early estimate rather than settled. */
+    fun isProvisional(now: Long = System.currentTimeMillis()): Boolean = measure(now).second
+
+    private fun measure(now: Long): Pair<Int, Boolean> {
         var words = committedWords
         var millis = committedMillis
 
@@ -72,9 +77,14 @@ class SpeedTracker(private val charsPerWord: Double) {
             }
         }
 
-        if (millis < MIN_VISIBLE_MS || words < MIN_VISIBLE_WORDS) return 0
+        if (millis < EARLY_MS || words < EARLY_WORDS) return 0 to true
         val wpm = words * 60_000L / millis
-        return if (wpm < MIN_WPM || wpm > MAX_WPM) 0 else wpm.toInt()
+        if (wpm < MIN_WPM || wpm > MAX_WPM) return 0 to true
+
+        // Shown early, but marked as an estimate until there is enough of a
+        // session for the scroll-ahead of one screen to have amortised.
+        val settled = millis >= SETTLED_MS && words >= SETTLED_WORDS
+        return wpm.toInt() to !settled
     }
 
     private fun begin(offset: Int, now: Long) {
@@ -110,8 +120,10 @@ class SpeedTracker(private val charsPerWord: Double) {
          * So no figure is shown until a session has run long enough for the
          * lead to amortise.
          */
-        const val MIN_VISIBLE_MS = 90_000L
-        const val MIN_VISIBLE_WORDS = 200L
+        const val EARLY_MS = 35_000L
+        const val EARLY_WORDS = 90L
+        const val SETTLED_MS = 90_000L
+        const val SETTLED_WORDS = 200L
         const val MIN_WPM = 50L
         const val MAX_WPM = 1_200L
     }

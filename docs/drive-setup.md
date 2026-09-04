@@ -73,23 +73,33 @@ writes each `drive_id` back into `catalog.json`, and uploads the catalog last
 so it never describes files that are not yet there. Re-running only uploads
 what changed.
 
-## Still to settle
+## How the app authenticates
 
-Whether a `drive.file` grant is shared across OAuth clients **within one Cloud
-project** is not documented by Google. Strong evidence says yes — the Picker
-requires an `appId` that is literally the *project number*, and Google states
-the project "must contain both the client ID and the app ID as it's used to
-authorize access to a user's files" — but it is not stated outright, and
-community reports disagree (from tests that changed project and client
-together, proving only cross-*project* isolation).
+Settled: the app carries the **same Desktop OAuth client** as `gog`, with the
+refresh token pasted once into its Connect screen.
 
-It matters because `gog` uploads with the Desktop client while the Android app
-would authenticate with its own client. Two ways forward:
+Google does not document whether a `drive.file` grant is shared across OAuth
+clients inside one Cloud project. The evidence leans strongly towards yes — the
+Picker requires an `appId` that is literally the *project number*, and Google
+states the project "must contain both the client ID and the app ID as it's used
+to authorize access to a user's files" — but it is never stated outright, and
+community reports disagree, from tests that changed project and client together
+and so proved only cross-*project* isolation.
 
-1. **Test it.** Upload with gog, then list from an Android-client token. Settles
-   it in about twenty minutes.
-2. **Sidestep it.** Give the app the same Desktop client's refresh token, so
-   both sides are literally the same OAuth client and the question cannot
-   arise.
+Using one client for both ends removes the question rather than betting on the
+answer. Generate the blob with:
 
-Decide before building `DriveCatalogSource`.
+```bash
+python3 tools/make_app_credentials.py --push
+```
+
+It assembles the client id and secret from the downloaded Cloud Console JSON
+with the refresh token `gog` already holds, base64-encodes them, and types the
+result straight into the focused Connect screen so the credential never lands
+in shell history. The app then stores it in `EncryptedSharedPreferences` and
+mints its own hourly access tokens.
+
+If the Android-native path is ever wanted instead — `AuthorizationClient` from
+Play Services, which re-mints access tokens silently and stores no refresh
+token at all — the cross-client question has to be answered first, because the
+app would then be authenticating as a different client than the uploader.
