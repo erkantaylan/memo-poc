@@ -41,8 +41,8 @@ class Downloader(
         val part = store.partFileFor(item)
         val alreadyHave = if (part.isFile) part.length() else 0L
 
-        val request = Request.Builder()
-            .url(source.fileUrl(item))
+        // The source builds the request so it can attach its own auth.
+        val request = source.fileRequest(item).newBuilder()
             .apply { if (alreadyHave > 0) header("Range", "bytes=$alreadyHave-") }
             .build()
 

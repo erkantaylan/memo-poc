@@ -10,30 +10,44 @@ import okhttp3.Request
 import java.io.IOException
 
 /**
- * Where library items come from. Today a static file server on the dev
- * workstation; tomorrow Google Drive. The UI only ever sees this interface, so
- * swapping the backend touches no screen code.
+ * Where library items come from: a static file server during development,
+ * Google Drive in normal use. The UI only ever sees this interface.
+ *
+ * Sources hand back a fully-formed [Request] rather than a bare URL, because
+ * authentication is the source's business — the downloader should not know
+ * whether a backend needs a bearer token.
  */
 interface CatalogSource {
     val name: String
 
     suspend fun fetchCatalog(): Catalog
 
-    /** URL a downloader can stream the given item from. */
-    fun fileUrl(item: LibraryItem): HttpUrl
+    /** A ready-to-execute request that streams the item's bytes. */
+    suspend fun fileRequest(item: LibraryItem): Request
 }
 
-private val json = Json {
+internal val catalogJson = Json {
     ignoreUnknownKeys = true
     isLenient = true
 }
 
 const val SUPPORTED_SCHEMA_VERSION = 2
 
+internal fun parseCatalog(body: String): Catalog {
+    val catalog = catalogJson.decodeFromString<Catalog>(body)
+    if (catalog.schemaVersion != SUPPORTED_SCHEMA_VERSION) {
+        throw IOException(
+            "Unsupported catalog schema_version ${catalog.schemaVersion} " +
+                "(this build understands $SUPPORTED_SCHEMA_VERSION)"
+        )
+    }
+    return catalog
+}
+
 /** Plain HTTP: a directory served as static files with catalog.json at its root. */
 class HttpCatalogSource(
     baseUrl: String,
-    private val client: OkHttpClient = defaultClient(),
+    private val client: OkHttpClient = OkHttpClient.Builder().build(),
 ) : CatalogSource {
 
     override val name = "http"
@@ -42,32 +56,18 @@ class HttpCatalogSource(
 
     override suspend fun fetchCatalog(): Catalog = withContext(Dispatchers.IO) {
         val url = base.newBuilder().addPathSegment("catalog.json").build()
-        val request = Request.Builder().url(url).build()
-
-        client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) {
-                throw IOException("HTTP ${response.code} from $url")
-            }
-            val catalog = json.decodeFromString<Catalog>(response.body.string())
-            if (catalog.schemaVersion != SUPPORTED_SCHEMA_VERSION) {
-                throw IOException(
-                    "Unsupported catalog schema_version ${catalog.schemaVersion} " +
-                        "(this build understands $SUPPORTED_SCHEMA_VERSION)"
-                )
-            }
-            catalog
+        client.newCall(Request.Builder().url(url).build()).execute().use { response ->
+            if (!response.isSuccessful) throw IOException("HTTP ${response.code} from $url")
+            parseCatalog(response.body.string())
         }
     }
 
-    override fun fileUrl(item: LibraryItem): HttpUrl {
+    override suspend fun fileRequest(item: LibraryItem): Request {
         // Paths come from a filesystem walk and are full of spaces, commas and
         // parentheses; addPathSegment percent-encodes each one correctly.
-        return base.newBuilder()
+        val url = base.newBuilder()
             .apply { item.path.split('/').forEach { addPathSegment(it) } }
             .build()
-    }
-
-    companion object {
-        fun defaultClient(): OkHttpClient = OkHttpClient.Builder().build()
+        return Request.Builder().url(url).build()
     }
 }

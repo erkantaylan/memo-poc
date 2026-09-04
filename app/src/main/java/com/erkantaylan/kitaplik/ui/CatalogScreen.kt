@@ -51,7 +51,11 @@ import com.erkantaylan.kitaplik.ui.theme.formatTextColor
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-fun CatalogScreen(viewModel: CatalogViewModel) {
+fun CatalogScreen(
+    viewModel: CatalogViewModel,
+    sourceLabel: String = "",
+    onSourceTap: () -> Unit = {},
+) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
@@ -65,6 +69,8 @@ fun CatalogScreen(viewModel: CatalogViewModel) {
             shown = state.shownCount,
             total = state.catalog?.count,
             totalBytes = state.totalBytes,
+            sourceLabel = sourceLabel,
+            onSourceTap = onSourceTap,
         )
 
         SearchField(value = state.query, onValueChange = viewModel::onQueryChange)
@@ -109,7 +115,13 @@ fun CatalogScreen(viewModel: CatalogViewModel) {
 }
 
 @Composable
-private fun Header(shown: Int, total: Int?, totalBytes: Long) {
+private fun Header(
+    shown: Int,
+    total: Int?,
+    totalBytes: Long,
+    sourceLabel: String,
+    onSourceTap: () -> Unit,
+) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -117,13 +129,31 @@ private fun Header(shown: Int, total: Int?, totalBytes: Long) {
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            "KİTAPLIK",
-            color = Palette.textDim,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 2.sp,
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "KİTAPLIK",
+                color = Palette.textDim,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 2.sp,
+            )
+            if (sourceLabel.isNotEmpty()) {
+                Text(
+                    sourceLabel,
+                    color = Palette.accent,
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.8.sp,
+                    modifier = Modifier
+                        .padding(start = 8.dp)
+                        .testTag("source_badge")
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(Palette.panel2)
+                        .clickable { onSourceTap() }
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                )
+            }
+        }
         if (total != null) {
             val count = if (shown == total) "$total" else "$shown/$total"
             Text(
