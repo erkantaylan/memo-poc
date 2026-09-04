@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Only the downloaded-library directory is ever shared out, and only as
+         a read-only content:// URI granted per intent. -->
+    <files-path name="library" path="library/" />
+</paths>

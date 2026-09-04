@@ -12,6 +12,8 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.erkantaylan.kitaplik.download.Downloader
+import com.erkantaylan.kitaplik.storage.LibraryStore
 import com.erkantaylan.kitaplik.ui.CatalogScreen
 import com.erkantaylan.kitaplik.ui.CatalogViewModel
 import com.erkantaylan.kitaplik.ui.theme.KitaplikTheme
@@ -22,11 +24,14 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
 
+        val store = LibraryStore(java.io.File(filesDir, "library"))
+        val downloader = Downloader(catalogSource, store)
+
         setContent {
             KitaplikTheme {
                 val vm: CatalogViewModel = viewModel(
                     factory = viewModelFactory {
-                        initializer { CatalogViewModel(catalogSource) }
+                        initializer { CatalogViewModel(catalogSource, store, downloader) }
                     }
                 )
                 Box(

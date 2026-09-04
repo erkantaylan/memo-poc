@@ -2,7 +2,9 @@ package com.erkantaylan.kitaplik.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,6 +18,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -27,13 +30,17 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.erkantaylan.kitaplik.DEV_LIBRARY_URL
+import android.widget.Toast
 import com.erkantaylan.kitaplik.catalog.ItemKind
 import com.erkantaylan.kitaplik.catalog.LibraryItem
 import com.erkantaylan.kitaplik.catalog.formatBytes
+import com.erkantaylan.kitaplik.download.DownloadState
+import com.erkantaylan.kitaplik.open.ExternalOpener
 import com.erkantaylan.kitaplik.ui.theme.Palette
 import com.erkantaylan.kitaplik.ui.theme.formatColor
 import com.erkantaylan.kitaplik.ui.theme.formatTextColor
@@ -41,6 +48,7 @@ import com.erkantaylan.kitaplik.ui.theme.formatTextColor
 @Composable
 fun CatalogScreen(viewModel: CatalogViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val context = LocalContext.current
 
     Column(
         Modifier
@@ -81,7 +89,12 @@ fun CatalogScreen(viewModel: CatalogViewModel) {
                         SectionHeader(section.category)
                     }
                     items(section.items, key = { it.id }) { item ->
-                        ItemRow(item)
+                        ItemRow(
+                            item = item,
+                            downloadState = state.downloadStateOf(item),
+                            onTap = { onItemTap(context, viewModel, item, state.downloadStateOf(item)) },
+                            onLongPress = { viewModel.delete(item) },
+                        )
                     }
                 }
             }
@@ -192,8 +205,48 @@ private fun SectionHeader(category: String) {
     )
 }
 
+/**
+ * Tap does whatever the item needs next: download it, cancel an in-flight
+ * download, or open a finished one. Long press deletes the local copy.
+ */
+private fun onItemTap(
+    context: android.content.Context,
+    viewModel: CatalogViewModel,
+    item: LibraryItem,
+    downloadState: DownloadState,
+) {
+    when (downloadState) {
+        is DownloadState.InProgress -> viewModel.cancel(item)
+        is DownloadState.Absent, is DownloadState.Failed -> viewModel.download(item)
+        is DownloadState.Done -> when (item.kind) {
+            ItemKind.PDF -> {
+                val result = ExternalOpener.open(context, item, viewModel.fileFor(item))
+                if (result is ExternalOpener.Result.NoHandler) {
+                    Toast.makeText(
+                        context,
+                        "No app installed that opens ${result.mimeType}",
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                }
+            }
+            // EPUB and markdown get an in-app reader; not built yet.
+            else -> Toast.makeText(
+                context,
+                "${item.kind.label} reader not built yet — long press to delete",
+                Toast.LENGTH_SHORT,
+            ).show()
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ItemRow(item: LibraryItem) {
+private fun ItemRow(
+    item: LibraryItem,
+    downloadState: DownloadState,
+    onTap: () -> Unit,
+    onLongPress: () -> Unit,
+) {
     Column(
         Modifier
             .fillMaxWidth()
@@ -202,6 +255,7 @@ private fun ItemRow(item: LibraryItem) {
             .clip(RoundedCornerShape(10.dp))
             .background(Palette.panel)
             .border(1.dp, Palette.border, RoundedCornerShape(10.dp))
+            .combinedClickable(onClick = onTap, onLongClick = onLongPress)
             .padding(12.dp),
     ) {
         // The title gets the full width and is never truncated.
@@ -211,7 +265,20 @@ private fun ItemRow(item: LibraryItem) {
             fontSize = 14.sp,
             lineHeight = 20.sp,
         )
-        MetaRow(item)
+        MetaRow(item, downloadState)
+
+        if (downloadState is DownloadState.InProgress) {
+            LinearProgressIndicator(
+                progress = { downloadState.fraction },
+                color = Palette.accent,
+                trackColor = Palette.panel2,
+                drawStopIndicator = {},
+                gapSize = 0.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
+            )
+        }
     }
 }
 
@@ -221,7 +288,7 @@ private fun ItemRow(item: LibraryItem) {
  * composable separated by a dot, so adding one is a single line.
  */
 @Composable
-private fun MetaRow(item: LibraryItem) {
+private fun MetaRow(item: LibraryItem, downloadState: DownloadState) {
     Row(
         Modifier.padding(top = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -239,6 +306,33 @@ private fun MetaRow(item: LibraryItem) {
             color = Palette.textDim,
             fontSize = 11.sp,
         )
+        when (downloadState) {
+            is DownloadState.Absent -> Unit
+            is DownloadState.InProgress -> {
+                MetaSeparator()
+                Text(
+                    "${(downloadState.fraction * 100).toInt()}% · tap to cancel",
+                    color = Palette.accent,
+                    fontSize = 11.sp,
+                )
+            }
+            is DownloadState.Done -> {
+                MetaSeparator()
+                Text(
+                    if (item.kind == ItemKind.PDF) "on device · tap to open" else "on device",
+                    color = Palette.epubText,
+                    fontSize = 11.sp,
+                )
+            }
+            is DownloadState.Failed -> {
+                MetaSeparator()
+                Text(
+                    downloadState.message,
+                    color = Palette.danger,
+                    fontSize = 11.sp,
+                )
+            }
+        }
     }
 }
 
