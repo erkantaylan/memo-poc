@@ -2,13 +2,17 @@ package com.erkantaylan.kitaplik.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -29,7 +33,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.erkantaylan.kitaplik.DEV_LIBRARY_URL
-import com.erkantaylan.kitaplik.catalog.Book
+import com.erkantaylan.kitaplik.catalog.ItemKind
+import com.erkantaylan.kitaplik.catalog.LibraryItem
 import com.erkantaylan.kitaplik.catalog.formatBytes
 import com.erkantaylan.kitaplik.ui.theme.Palette
 import com.erkantaylan.kitaplik.ui.theme.formatColor
@@ -49,38 +54,35 @@ fun CatalogScreen(viewModel: CatalogViewModel) {
             totalBytes = state.totalBytes,
         )
 
-        SearchField(
-            value = state.query,
-            onValueChange = viewModel::onQueryChange,
-        )
+        SearchField(value = state.query, onValueChange = viewModel::onQueryChange)
+
+        if (state.availableFormats.isNotEmpty()) {
+            FormatFilterRow(
+                formats = state.availableFormats,
+                active = state.formatFilter,
+                onToggle = viewModel::onFormatFilterToggle,
+            )
+        }
 
         when {
-            state.loading -> Centre {
-                CircularProgressIndicator(color = Palette.accent)
-            }
+            state.loading -> Centre { CircularProgressIndicator(color = Palette.accent) }
 
-            state.error != null -> Centre {
-                ErrorPanel(state.error!!)
-            }
+            state.error != null -> Centre { ErrorPanel(state.error!!) }
 
             state.sections.isEmpty() -> Centre {
-                Text(
-                    "No books match “${state.query}”.",
-                    color = Palette.text,
-                    fontSize = 13.sp,
-                )
+                Text("Nothing matches.", color = Palette.text, fontSize = 13.sp)
             }
 
             else -> LazyColumn(
                 Modifier.fillMaxSize(),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 32.dp),
+                contentPadding = PaddingValues(bottom = 32.dp),
             ) {
                 state.sections.forEach { section ->
                     item(key = "header-${section.category}") {
                         SectionHeader(section.category)
                     }
-                    items(section.books, key = { it.id }) { book ->
-                        BookRow(book)
+                    items(section.items, key = { it.id }) { item ->
+                        ItemRow(item)
                     }
                 }
             }
@@ -121,18 +123,13 @@ private fun SearchField(value: String, onValueChange: (String) -> Unit) {
         Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
-            .padding(bottom = 12.dp)
             .clip(RoundedCornerShape(8.dp))
             .background(Palette.panel)
             .border(1.dp, Palette.border, RoundedCornerShape(8.dp))
             .padding(horizontal = 12.dp, vertical = 10.dp)
     ) {
         if (value.isEmpty()) {
-            Text(
-                "Search title or category",
-                color = Palette.textDim,
-                fontSize = 14.sp,
-            )
+            Text("Search title or category", color = Palette.textDim, fontSize = 14.sp)
         }
         BasicTextField(
             value = value,
@@ -142,6 +139,42 @@ private fun SearchField(value: String, onValueChange: (String) -> Unit) {
             cursorBrush = SolidColor(Palette.accent),
             modifier = Modifier.fillMaxWidth(),
         )
+    }
+}
+
+@Composable
+private fun FormatFilterRow(
+    formats: List<String>,
+    active: String?,
+    onToggle: (String) -> Unit,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        formats.forEach { format ->
+            val selected = active == format
+            val kind = ItemKind.of(format)
+            Text(
+                kind.label,
+                color = if (selected) Palette.text else Palette.textDim,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 0.6.sp,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(if (selected) formatColor(format) else Palette.panel)
+                    .border(
+                        1.dp,
+                        if (selected) formatColor(format) else Palette.border,
+                        RoundedCornerShape(6.dp),
+                    )
+                    .clickable { onToggle(format) }
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+            )
+        }
     }
 }
 
@@ -161,8 +194,8 @@ private fun SectionHeader(category: String) {
 }
 
 @Composable
-private fun BookRow(book: Book) {
-    Column(
+private fun ItemRow(item: LibraryItem) {
+    Row(
         Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
@@ -170,47 +203,45 @@ private fun BookRow(book: Book) {
             .clip(RoundedCornerShape(10.dp))
             .background(Palette.panel)
             .border(1.dp, Palette.border, RoundedCornerShape(10.dp))
-            .padding(12.dp)
+            .padding(12.dp),
+        verticalAlignment = Alignment.Top,
     ) {
-        Text(
-            book.title,
-            color = Palette.text,
-            fontSize = 14.sp,
-            lineHeight = 20.sp,
-            maxLines = 3,
-        )
-        Row(
-            Modifier.padding(top = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            book.availableFormats.forEach { format ->
-                FormatChip(format, book.formats.getValue(format).bytes)
-            }
+        // Titles repeat across formats, so the format leads the row.
+        FormatBadge(item)
+        Column(Modifier.padding(start = 12.dp)) {
+            Text(
+                item.title,
+                color = Palette.text,
+                fontSize = 14.sp,
+                lineHeight = 20.sp,
+                maxLines = 3,
+            )
+            Text(
+                formatBytes(item.bytes),
+                color = Palette.textDim,
+                fontSize = 11.sp,
+                modifier = Modifier.padding(top = 4.dp),
+            )
         }
     }
 }
 
 @Composable
-private fun FormatChip(format: String, bytes: Long) {
-    Row(
+private fun FormatBadge(item: LibraryItem) {
+    Box(
         Modifier
-            .clip(RoundedCornerShape(5.dp))
-            .background(formatColor(format))
-            .padding(horizontal = 8.dp, vertical = 3.dp),
-        horizontalArrangement = Arrangement.spacedBy(5.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .width(52.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .background(formatColor(item.format))
+            .padding(vertical = 6.dp),
+        contentAlignment = Alignment.Center,
     ) {
         Text(
-            format.uppercase(),
+            item.kind.label,
             color = Palette.text,
             fontSize = 10.sp,
             fontWeight = FontWeight.Bold,
             letterSpacing = 0.6.sp,
-        )
-        Text(
-            formatBytes(bytes),
-            color = Palette.textDim,
-            fontSize = 10.sp,
         )
     }
 }

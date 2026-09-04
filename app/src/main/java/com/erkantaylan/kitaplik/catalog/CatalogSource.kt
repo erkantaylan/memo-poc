@@ -10,17 +10,17 @@ import okhttp3.Request
 import java.io.IOException
 
 /**
- * Where books come from. Today a static file server on the dev workstation;
- * tomorrow Google Drive. The UI only ever sees this interface, so swapping the
- * backend touches no screen code.
+ * Where library items come from. Today a static file server on the dev
+ * workstation; tomorrow Google Drive. The UI only ever sees this interface, so
+ * swapping the backend touches no screen code.
  */
 interface CatalogSource {
     val name: String
 
     suspend fun fetchCatalog(): Catalog
 
-    /** URL a downloader can stream the given rendition from. */
-    fun fileUrl(book: Book, format: String): HttpUrl
+    /** URL a downloader can stream the given item from. */
+    fun fileUrl(item: LibraryItem): HttpUrl
 }
 
 private val json = Json {
@@ -28,7 +28,7 @@ private val json = Json {
     isLenient = true
 }
 
-const val SUPPORTED_SCHEMA_VERSION = 1
+const val SUPPORTED_SCHEMA_VERSION = 2
 
 /** Plain HTTP: a directory served as static files with catalog.json at its root. */
 class HttpCatalogSource(
@@ -48,9 +48,7 @@ class HttpCatalogSource(
             if (!response.isSuccessful) {
                 throw IOException("HTTP ${response.code} from $url")
             }
-            val body = response.body.string()
-
-            val catalog = json.decodeFromString<Catalog>(body)
+            val catalog = json.decodeFromString<Catalog>(response.body.string())
             if (catalog.schemaVersion != SUPPORTED_SCHEMA_VERSION) {
                 throw IOException(
                     "Unsupported catalog schema_version ${catalog.schemaVersion} " +
@@ -61,14 +59,11 @@ class HttpCatalogSource(
         }
     }
 
-    override fun fileUrl(book: Book, format: String): HttpUrl {
-        val f = book.formats[format]
-            ?: throw IllegalArgumentException("${book.title} has no $format rendition")
-
+    override fun fileUrl(item: LibraryItem): HttpUrl {
         // Paths come from a filesystem walk and are full of spaces, commas and
         // parentheses; addPathSegment percent-encodes each one correctly.
         return base.newBuilder()
-            .apply { f.path.split('/').forEach { addPathSegment(it) } }
+            .apply { item.path.split('/').forEach { addPathSegment(it) } }
             .build()
     }
 
