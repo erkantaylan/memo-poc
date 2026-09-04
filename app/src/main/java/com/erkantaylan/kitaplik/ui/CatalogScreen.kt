@@ -11,8 +11,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -38,6 +36,7 @@ import com.erkantaylan.kitaplik.catalog.LibraryItem
 import com.erkantaylan.kitaplik.catalog.formatBytes
 import com.erkantaylan.kitaplik.ui.theme.Palette
 import com.erkantaylan.kitaplik.ui.theme.formatColor
+import com.erkantaylan.kitaplik.ui.theme.formatTextColor
 
 @Composable
 fun CatalogScreen(viewModel: CatalogViewModel) {
@@ -195,7 +194,7 @@ private fun SectionHeader(category: String) {
 
 @Composable
 private fun ItemRow(item: LibraryItem) {
-    Row(
+    Column(
         Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
@@ -204,46 +203,53 @@ private fun ItemRow(item: LibraryItem) {
             .background(Palette.panel)
             .border(1.dp, Palette.border, RoundedCornerShape(10.dp))
             .padding(12.dp),
-        verticalAlignment = Alignment.Top,
     ) {
-        // Titles repeat across formats, so the format leads the row.
-        FormatBadge(item)
-        Column(Modifier.padding(start = 12.dp)) {
-            Text(
-                item.title,
-                color = Palette.text,
-                fontSize = 14.sp,
-                lineHeight = 20.sp,
-                maxLines = 3,
-            )
-            Text(
-                formatBytes(item.bytes),
-                color = Palette.textDim,
-                fontSize = 11.sp,
-                modifier = Modifier.padding(top = 4.dp),
-            )
-        }
+        // The title gets the full width and is never truncated.
+        Text(
+            item.title,
+            color = Palette.text,
+            fontSize = 14.sp,
+            lineHeight = 20.sp,
+        )
+        MetaRow(item)
+    }
+}
+
+/**
+ * Secondary line under the title: format, size, and whatever else earns a
+ * place later (downloaded state, progress, date added). Each field is its own
+ * composable separated by a dot, so adding one is a single line.
+ */
+@Composable
+private fun MetaRow(item: LibraryItem) {
+    Row(
+        Modifier.padding(top = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            item.kind.label,
+            color = formatTextColor(item.format),
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Medium,
+            letterSpacing = 0.4.sp,
+        )
+        MetaSeparator()
+        Text(
+            formatBytes(item.bytes),
+            color = Palette.textDim,
+            fontSize = 11.sp,
+        )
     }
 }
 
 @Composable
-private fun FormatBadge(item: LibraryItem) {
-    Box(
-        Modifier
-            .width(52.dp)
-            .clip(RoundedCornerShape(6.dp))
-            .background(formatColor(item.format))
-            .padding(vertical = 6.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            item.kind.label,
-            color = Palette.text,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 0.6.sp,
-        )
-    }
+private fun MetaSeparator() {
+    Text(
+        "·",
+        color = Palette.textDim,
+        fontSize = 11.sp,
+        modifier = Modifier.padding(horizontal = 6.dp),
+    )
 }
 
 @Composable

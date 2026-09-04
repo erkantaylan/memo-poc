@@ -16,16 +16,31 @@ object Palette {
     val accent = Color(0xFF6DB1FF)
     val danger = Color(0xFFC76B6B)
 
+    // Chip / badge fills.
     val epub = Color(0xFF3D6B4A)
     val md = Color(0xFF4A4A6B)
     val pdf = Color(0xFF6B3D3D)
+
+    // Lighter variants, for the format when it is drawn as text on the panel.
+    val epubText = Color(0xFF7FC894)
+    val mdText = Color(0xFF9A9AD0)
+    val pdfText = Color(0xFFD08A8A)
 }
 
+/** Fill colour, for chips and badges. */
 fun formatColor(format: String): Color = when (format) {
     "epub" -> Palette.epub
     "md" -> Palette.md
     "pdf" -> Palette.pdf
     else -> Palette.panel2
+}
+
+/** Foreground colour, for the format drawn as text against a panel. */
+fun formatTextColor(format: String): Color = when (format) {
+    "epub" -> Palette.epubText
+    "md" -> Palette.mdText
+    "pdf" -> Palette.pdfText
+    else -> Palette.textDim
 }
 
 private val KitaplikColorScheme = darkColorScheme(
