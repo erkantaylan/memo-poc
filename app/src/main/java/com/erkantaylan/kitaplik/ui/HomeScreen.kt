@@ -5,6 +5,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -30,14 +32,18 @@ import com.erkantaylan.kitaplik.ui.theme.Palette
 fun HomeScreen(
     inProgress: List<com.erkantaylan.kitaplik.reader.BookProgress>,
     recent: List<com.erkantaylan.kitaplik.reader.BookProgress>,
+    bookmarks: List<com.erkantaylan.kitaplik.reader.Bookmark>,
     onOpen: (String) -> Unit,
+    onOpenBookmark: (com.erkantaylan.kitaplik.reader.Bookmark) -> Unit,
+    onRemoveBookmark: (String) -> Unit,
     onBrowse: () -> Unit,
 ) {
-    Column(
+    androidx.compose.foundation.lazy.LazyColumn(
         Modifier
             .fillMaxSize()
             .background(Palette.bg)
     ) {
+      item {
         ScreenTitle("KİTAPLIK")
 
         SectionLabel("Currently reading")
@@ -60,6 +66,23 @@ fun HomeScreen(
             recent.forEach { ProgressRow(it, onOpen, showBar = false) }
         }
 
+        SectionLabel("Bookmarks")
+      }
+
+      if (bookmarks.isEmpty()) {
+          item {
+              Placeholder(
+                  "No bookmarks yet.",
+                  "Long-press any paragraph while reading to mark it."
+              )
+          }
+      } else {
+          items(bookmarks, key = { it.id }) { mark ->
+              BookmarkRow(mark, onOpenBookmark, onRemoveBookmark)
+          }
+      }
+
+      item {
         Box(Modifier.fillMaxWidth().padding(16.dp)) {
             Text(
                 "Browse the library →",
@@ -73,6 +96,66 @@ fun HomeScreen(
                     .padding(vertical = 10.dp),
             )
         }
+      }
+    }
+}
+
+@Composable
+private fun BookmarkRow(
+    mark: com.erkantaylan.kitaplik.reader.Bookmark,
+    onOpen: (com.erkantaylan.kitaplik.reader.Bookmark) -> Unit,
+    onRemove: (String) -> Unit,
+) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .padding(bottom = 8.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(Palette.panel)
+            .border(1.dp, Palette.border, RoundedCornerShape(10.dp))
+            .testTagged("bookmark:${mark.id}")
+            .clickableNoRipple { onOpen(mark) }
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        Text(
+            "\u201C${mark.preview}\u201D",
+            color = Palette.text,
+            fontSize = 14.sp,
+            lineHeight = 20.sp,
+            maxLines = 3,
+        )
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                listOfNotNull(
+                    mark.bookTitle.take(34),
+                    formatWhen(mark.createdAt),
+                ).joinToString(" · "),
+                color = Palette.textDim,
+                fontSize = 11.5.sp,
+            )
+            Text(
+                "Remove",
+                color = Palette.textDim,
+                fontSize = 11.5.sp,
+                modifier = Modifier.clickableNoRipple { onRemove(mark.id) },
+            )
+        }
+    }
+}
+
+private fun formatWhen(epochMillis: Long): String {
+    val days = (System.currentTimeMillis() - epochMillis) / 86_400_000
+    return when {
+        days <= 0L -> "today"
+        days == 1L -> "yesterday"
+        days < 30L -> "$days days ago"
+        else -> java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale.getDefault())
+            .format(java.util.Date(epochMillis))
     }
 }
 

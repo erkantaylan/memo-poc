@@ -24,6 +24,7 @@ import com.erkantaylan.kitaplik.catalog.DriveCatalogSource
 import com.erkantaylan.kitaplik.catalog.HttpCatalogSource
 import com.erkantaylan.kitaplik.catalog.LibraryItem
 import com.erkantaylan.kitaplik.download.Downloader
+import com.erkantaylan.kitaplik.reader.BookmarkStore
 import com.erkantaylan.kitaplik.reader.ReaderViewModel
 import com.erkantaylan.kitaplik.reader.ReadingProgressStore
 import com.erkantaylan.kitaplik.storage.LibraryStore
@@ -52,6 +53,7 @@ class MainActivity : ComponentActivity() {
         val tokens = TokenProvider(credentials)
         val store = LibraryStore(File(filesDir, "library"))
         val progress = ReadingProgressStore(this)
+        val bookmarks = BookmarkStore(this)
         val textCache = File(cacheDir, "text")
 
         setContent {
@@ -71,7 +73,8 @@ class MainActivity : ComponentActivity() {
                 var tab by remember { mutableStateOf(Tab.HOME) }
                 // Non-null while reading: the reader takes the whole screen,
                 // tab bar included, the way a book should.
-                var reading by remember { mutableStateOf<LibraryItem?>(null) }
+                // Item plus an optional offset, set when opening a bookmark.
+                var reading by remember { mutableStateOf<Pair<LibraryItem, Int?>?>(null) }
 
                 if (mode == Mode.UNSET) {
                     ConnectScreen(
@@ -96,15 +99,17 @@ class MainActivity : ComponentActivity() {
                         },
                     )
 
-                    val open: (LibraryItem) -> Unit = { reading = it }
+                    val open: (LibraryItem) -> Unit = { reading = it to null }
                     val current = reading
 
                     if (current != null) {
+                        val (item, offset) = current
                         val readerVm: ReaderViewModel = viewModel(
-                            key = "reader-${current.id}",
+                            key = "reader-${item.id}-${offset ?: -1}",
                             factory = viewModelFactory {
                                 initializer {
-                                    ReaderViewModel(current, store, progress, textCache)
+                                    ReaderViewModel(item, store, progress, bookmarks,
+                                                    textCache, offset)
                                 }
                             },
                         )
@@ -118,10 +123,16 @@ class MainActivity : ComponentActivity() {
                                 HomeScreen(
                                     inProgress = progress.inProgress(),
                                     recent = progress.recent(),
+                                    bookmarks = bookmarks.recent(),
                                     onOpen = { id ->
                                         catalogItems.firstOrNull { it.id == id }
-                                            ?.let { reading = it }
+                                            ?.let { reading = it to null }
                                     },
+                                    onOpenBookmark = { mark ->
+                                        catalogItems.firstOrNull { it.id == mark.itemId }
+                                            ?.let { reading = it to mark.charOffset }
+                                    },
+                                    onRemoveBookmark = { bookmarks.remove(it) },
                                     onBrowse = { tab = Tab.CLOUD },
                                 )
                             }

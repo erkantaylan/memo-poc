@@ -8,14 +8,20 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -35,6 +41,8 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.erkantaylan.kitaplik.reader.ReaderViewModel
 import com.erkantaylan.kitaplik.ui.theme.Palette
+import android.widget.Toast
+import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.flow.distinctUntilChanged
 
 /**
@@ -44,23 +52,43 @@ import kotlinx.coroutines.flow.distinctUntilChanged
  * beside it and share the same position, which is why the view model deals in
  * paragraph indices rather than pixels.
  */
-@OptIn(ExperimentalComposeUiApi::class)
+@OptIn(ExperimentalComposeUiApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
+    val context = LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
 
     // Restore the saved position once the text has been extracted.
     LaunchedEffect(state.startParagraph, state.loading) {
-        if (!state.loading && state.startParagraph > 0) {
+        if (state.loading) return@LaunchedEffect
+        if (state.startParagraph > 0 || state.startFraction > 0f) {
             listState.scrollToItem(state.startParagraph)
+            // Now that the paragraph is laid out we know its height, so the
+            // saved fraction can be turned back into pixels. This is what
+            // makes the position survive a font-size change.
+            val info = listState.layoutInfo.visibleItemsInfo
+                .firstOrNull { it.index == state.startParagraph }
+            if (info != null && state.startFraction > 0f) {
+                listState.scrollBy(state.startFraction * info.size)
+            }
         }
     }
 
     // Record where we are whenever the top visible paragraph changes.
     LaunchedEffect(listState, state.loading) {
         if (state.loading) return@LaunchedEffect
-        snapshotOfFirstVisible(listState).collect { viewModel.onParagraphVisible(it) }
+        androidx.compose.runtime.snapshotFlow {
+            val index = listState.firstVisibleItemIndex
+            val size = listState.layoutInfo.visibleItemsInfo
+                .firstOrNull { it.index == index }?.size ?: 0
+            val fraction = if (size > 0)
+                listState.firstVisibleItemScrollOffset.toFloat() / size else 0f
+            index to fraction
+        }
+            .distinctUntilChanged()
+            .collect { (index, fraction) -> viewModel.onScrolled(index, fraction) }
     }
 
     val progress by remember(state.book) {
@@ -80,7 +108,9 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
         ReaderBar(
             title = viewModel.title,
             author = viewModel.author,
+            bookmarkCount = state.bookmarks.size,
             onBack = onBack,
+            onBookmarks = { viewModel.setBookmarksVisible(!state.showBookmarks) },
             onSmaller = { viewModel.adjustFont(-0.1f) },
             onLarger = { viewModel.adjustFont(0.1f) },
         )
@@ -118,12 +148,31 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 items(state.book.paragraphs, key = { it.index }) { paragraph ->
+                    val marked = paragraph.index in state.markedParagraphs
                     Text(
                         paragraph.text,
                         color = Palette.readerText,
                         fontSize = (17 * state.fontScale).sp,
                         lineHeight = (28 * state.fontScale).sp,
                         fontFamily = FontFamily.Serif,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(6.dp))
+                            .then(
+                                if (marked) Modifier.background(Palette.panel) else Modifier
+                            )
+                            .combinedClickable(
+                                onClick = {},
+                                onLongClick = {
+                                    val added = viewModel.toggleBookmark(paragraph.index)
+                                    Toast.makeText(
+                                        context,
+                                        if (added) "Bookmarked" else "Bookmark removed",
+                                        Toast.LENGTH_SHORT,
+                                    ).show()
+                                },
+                            )
+                            .padding(horizontal = 6.dp, vertical = 3.dp),
                     )
                 }
             }
@@ -135,7 +184,9 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
 private fun ReaderBar(
     title: String,
     author: String,
+    bookmarkCount: Int,
     onBack: () -> Unit,
+    onBookmarks: () -> Unit,
     onSmaller: () -> Unit,
     onLarger: () -> Unit,
 ) {
@@ -162,6 +213,13 @@ private fun ReaderBar(
                 Text(author, color = Palette.textDim, fontSize = 11.5.sp, maxLines = 1)
             }
         }
+        Text(
+            if (bookmarkCount > 0) "\u2691 $bookmarkCount" else "\u2691",
+            color = if (bookmarkCount > 0) Palette.accent else Palette.textDim,
+            fontSize = 15.sp,
+            modifier = Modifier.testTag("bookmarks")
+                .clickableNoRipple(onBookmarks).padding(8.dp),
+        )
         Text("A−", color = Palette.textDim, fontSize = 15.sp,
              modifier = Modifier.testTag("font_smaller")
                  .clickableNoRipple(onSmaller).padding(8.dp))
@@ -171,6 +229,4 @@ private fun ReaderBar(
     }
 }
 
-private fun snapshotOfFirstVisible(state: androidx.compose.foundation.lazy.LazyListState) =
-    androidx.compose.runtime.snapshotFlow { state.firstVisibleItemIndex }
-        .distinctUntilChanged()
+
