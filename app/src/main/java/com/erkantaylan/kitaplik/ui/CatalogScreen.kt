@@ -18,10 +18,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -49,15 +52,27 @@ import com.erkantaylan.kitaplik.ui.theme.Palette
 import com.erkantaylan.kitaplik.ui.theme.formatColor
 import com.erkantaylan.kitaplik.ui.theme.formatTextColor
 
-@OptIn(ExperimentalComposeUiApi::class)
+@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun CatalogScreen(
     viewModel: CatalogViewModel,
-    sourceLabel: String = "",
-    onSourceTap: () -> Unit = {},
+    title: String = "KİTAPLIK",
+    onlyDownloaded: Boolean = false,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
+
+    // "On device" is the same catalog narrowed to what has actually been
+    // downloaded, so both tabs share one view model and one download state.
+    val sections = remember(state.sections, state.downloads, onlyDownloaded) {
+        if (!onlyDownloaded) state.sections
+        else state.sections
+            .map { s -> s.copy(items = s.items.filter {
+                state.downloadStateOf(it) is DownloadState.Done }) }
+            .filter { it.items.isNotEmpty() }
+    }
+    val shown = sections.sumOf { it.items.size }
+    val shownBytes = sections.sumOf { s -> s.items.sumOf { it.bytes } }
 
     Column(
         Modifier
@@ -66,11 +81,11 @@ fun CatalogScreen(
             .semantics { testTagsAsResourceId = true }
     ) {
         Header(
-            shown = state.shownCount,
-            total = state.catalog?.count,
-            totalBytes = state.totalBytes,
-            sourceLabel = sourceLabel,
-            onSourceTap = onSourceTap,
+            title = title,
+            shown = shown,
+            total = if (onlyDownloaded) shown else state.catalog?.count,
+            totalBytes = shownBytes,
+            onRefresh = viewModel::refresh,
         )
 
         SearchField(value = state.query, onValueChange = viewModel::onQueryChange)
@@ -92,21 +107,29 @@ fun CatalogScreen(
                 Text("Nothing matches.", color = Palette.text, fontSize = 13.sp)
             }
 
-            else -> LazyColumn(
-                Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = 32.dp),
+            else -> PullToRefreshBox(
+                isRefreshing = state.refreshing,
+                onRefresh = viewModel::refresh,
+                modifier = Modifier.fillMaxSize(),
             ) {
-                state.sections.forEach { section ->
-                    item(key = "header-${section.category}") {
-                        SectionHeader(section.category)
-                    }
-                    items(section.items, key = { it.id }) { item ->
-                        ItemRow(
-                            item = item,
-                            downloadState = state.downloadStateOf(item),
-                            onTap = { onItemTap(context, viewModel, item, state.downloadStateOf(item)) },
-                            onLongPress = { viewModel.delete(item) },
-                        )
+                LazyColumn(
+                    Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = 32.dp),
+                ) {
+                    sections.forEach { section ->
+                        item(key = "header-${section.category}") {
+                            SectionHeader(section.category)
+                        }
+                        items(section.items, key = { it.id }) { item ->
+                            ItemRow(
+                                item = item,
+                                downloadState = state.downloadStateOf(item),
+                                onTap = {
+                                    onItemTap(context, viewModel, item, state.downloadStateOf(item))
+                                },
+                                onLongPress = { viewModel.delete(item) },
+                            )
+                        }
                     }
                 }
             }
@@ -116,11 +139,11 @@ fun CatalogScreen(
 
 @Composable
 private fun Header(
+    title: String,
     shown: Int,
     total: Int?,
     totalBytes: Long,
-    sourceLabel: String,
-    onSourceTap: () -> Unit,
+    onRefresh: () -> Unit,
 ) {
     Row(
         Modifier
@@ -129,37 +152,24 @@ private fun Header(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "KİTAPLIK",
-                color = Palette.textDim,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 2.sp,
-            )
-            if (sourceLabel.isNotEmpty()) {
-                Text(
-                    sourceLabel,
-                    color = Palette.accent,
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 0.8.sp,
-                    modifier = Modifier
-                        .padding(start = 8.dp)
-                        .testTag("source_badge")
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(Palette.panel2)
-                        .clickable { onSourceTap() }
-                        .padding(horizontal = 6.dp, vertical = 2.dp),
-                )
-            }
-        }
+        Text(
+            title,
+            color = Palette.textDim,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 2.sp,
+        )
         if (total != null) {
             val count = if (shown == total) "$total" else "$shown/$total"
             Text(
-                "$count · ${formatBytes(totalBytes)}",
+                "$count · ${formatBytes(totalBytes)}  ↻",
                 color = Palette.textDim,
                 fontSize = 12.sp,
+                modifier = Modifier
+                    .testTag("refresh")
+                    .clip(RoundedCornerShape(4.dp))
+                    .clickable { onRefresh() }
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
             )
         }
     }
@@ -302,9 +312,17 @@ private fun ItemRow(
         Text(
             item.title,
             color = Palette.text,
-            fontSize = 14.sp,
-            lineHeight = 20.sp,
+            fontSize = 15.sp,
+            lineHeight = 21.sp,
         )
+        if (item.author.isNotBlank()) {
+            Text(
+                if (item.year.isNotBlank()) "${item.author} · ${item.year}" else item.author,
+                color = Palette.textDim,
+                fontSize = 13.sp,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+        }
         MetaRow(item, downloadState)
 
         if (downloadState is DownloadState.InProgress) {

@@ -24,6 +24,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 
 FOLDER_NAME = "kitaplik-library"
 GOG = os.path.expanduser("~/go/bin/gog")
@@ -119,6 +120,28 @@ def remote_name(item: dict) -> str:
     return f"{item['id']}.{item['format']}"
 
 
+def upload_with_retry(local: str, folder_id: str, name: str, attempts: int = 3):
+    """Uploads fail transiently on a long run (http2 header timeouts, 5xx).
+    Retry a few times rather than abandoning a 500 MB sync mid-way."""
+    delay = 3
+    for attempt in range(1, attempts + 1):
+        proc = subprocess.run(
+            [GOG, "drive", "upload", local, "--parent", folder_id, "--name", name, "--json"],
+            capture_output=True, text=True,
+        )
+        if proc.returncode == 0:
+            try:
+                return dig_id(json.loads(proc.stdout or "null")), None
+            except json.JSONDecodeError:
+                return None, "upload succeeded but returned unparseable JSON"
+        detail = (proc.stderr or proc.stdout).strip().splitlines()[-1:] or ["unknown error"]
+        if attempt == attempts:
+            return None, detail[0][:160]
+        time.sleep(delay)
+        delay *= 2
+    return None, "exhausted retries"
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -126,6 +149,8 @@ def main():
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--relink", action="store_true",
                     help="only refresh drive ids from what is already uploaded")
+    ap.add_argument("--prune", action="store_true",
+                    help="delete Drive files the catalog no longer references")
     args = ap.parse_args()
 
     library = os.path.abspath(args.library)
@@ -157,6 +182,7 @@ def main():
     print(f"remote:  {len(existing)} file(s) already there\n")
 
     uploaded = skipped = 0
+    failures: list[tuple[dict, str]] = []
     for item in items:
         name = remote_name(item)
         local = os.path.join(library, item["path"])
@@ -183,10 +209,10 @@ def main():
 
         print(f"  upload   {item['format']:5} {size_mb:6.1f} MB  {item['title'][:40]} ... ",
               end="", flush=True)
-        result = gog("drive", "upload", local, "--parent", folder_id, "--name", name)
-        file_id = dig_id(result)
+        file_id, error = upload_with_retry(local, folder_id, name)
         if not file_id:
-            print("FAILED (no id returned)")
+            print(f"FAILED: {error}")
+            failures.append((item, error))
             continue
         item["drive_id"] = file_id
         uploaded += 1
@@ -211,9 +237,27 @@ def main():
                          "--parent", folder_id, "--name", catalog_name))
         print(f"catalog: uploaded to Drive ({cid})")
 
+    if args.prune:
+        wanted = {remote_name(i) for i in items} | {"catalog.json"}
+        fresh = remote_index(folder_id)
+        orphans = {n: fid for n, fid in fresh.items() if n not in wanted}
+        if orphans:
+            print(f"\npruning {len(orphans)} file(s) no longer in the catalog:")
+            for name, fid in sorted(orphans.items()):
+                print(f"  delete {name[:70]}")
+                subprocess.run([GOG, "drive", "delete", fid, "-y"],
+                               capture_output=True, text=True)
+        else:
+            print("\nnothing to prune")
+
     linked = sum(1 for i in items if i.get("drive_id"))
     print(f"\ndone: {uploaded} uploaded, {skipped} already present, "
           f"{linked}/{len(items)} entries linked to Drive")
+
+    if failures:
+        print(f"\n{len(failures)} failed (re-run to retry just these):")
+        for item, error in failures:
+            print(f"  {item['format']:5} {item['title'][:44]}\n        {error}")
 
 
 if __name__ == "__main__":

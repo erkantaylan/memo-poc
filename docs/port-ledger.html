@@ -1,0 +1,941 @@
+<title>Kitaplık Port Ledger</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+  /* ---------------------------------------------------------------------
+     Palette lifted from the legacy app's own theme tokens (style.css):
+     "paper" light  #f6efdf / #2a261e / accent #a85f1e
+     "sepia" dark   #1c1a16 / #d8cfb8 / accent #d99e5a
+     Using the subject's real reading palette, not a new one.
+     --------------------------------------------------------------------- */
+  :root {
+    --bg:        #f6efdf;
+    --surface:   #efe6d2;
+    --surface-2: #e7dcc4;
+    --rule:      #d6c8a8;
+    --rule-soft: #e3d7bd;
+    --fg:        #2a261e;
+    --fg-mid:    #5c5344;
+    --fg-dim:    #857a66;
+    --accent:    #a85f1e;
+    --accent-bg: #f0e0c8;
+
+    --built:     #4a6b38;
+    --partial:   #9a6a1c;
+    --unbuilt:   #7d7364;
+    --dead:      #a09484;
+
+    --pill-easy:   #1f4731;
+    --pill-medium: #2a3f5e;
+    --pill-hard:   #5a3a1e;
+    --pill-expert: #5a2424;
+
+    --shadow: 0 1px 2px rgba(42,38,30,.06);
+
+    --serif: "Source Serif 4", Charter, "Noto Serif", Georgia, serif;
+    --sans:  Inter, -apple-system, Roboto, system-ui, sans-serif;
+    --mono:  "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:        #1c1a16;
+      --surface:   #24211b;
+      --surface-2: #2c2820;
+      --rule:      #3b352b;
+      --rule-soft: #2f2a22;
+      --fg:        #d8cfb8;
+      --fg-mid:    #a89e88;
+      --fg-dim:    #857c6a;
+      --accent:    #d99e5a;
+      --accent-bg: #33291d;
+
+      --built:     #8fae70;
+      --partial:   #d9a95a;
+      --unbuilt:   #948a76;
+      --dead:      #6d6557;
+
+      --pill-easy:   #2c5f42;
+      --pill-medium: #3a557a;
+      --pill-hard:   #7a5028;
+      --pill-expert: #7a3131;
+
+      --shadow: 0 1px 2px rgba(0,0,0,.3);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --bg:        #1c1a16;
+    --surface:   #24211b;
+    --surface-2: #2c2820;
+    --rule:      #3b352b;
+    --rule-soft: #2f2a22;
+    --fg:        #d8cfb8;
+    --fg-mid:    #a89e88;
+    --fg-dim:    #857c6a;
+    --accent:    #d99e5a;
+    --accent-bg: #33291d;
+
+    --built:     #8fae70;
+    --partial:   #d9a95a;
+    --unbuilt:   #948a76;
+    --dead:      #6d6557;
+
+    --pill-easy:   #2c5f42;
+    --pill-medium: #3a557a;
+    --pill-hard:   #7a5028;
+    --pill-expert: #7a3131;
+
+    --shadow: 0 1px 2px rgba(0,0,0,.3);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--serif);
+    font-size: 16px;
+    line-height: 1.55;
+    margin: 0;
+    padding: 0 24px 96px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 1000px; margin: 0 auto; }
+
+  /* ---------- masthead ---------- */
+  header.masthead {
+    padding: 48px 0 28px;
+    border-bottom: 2px solid var(--rule);
+  }
+  .eyebrow {
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 10px;
+  }
+  h1 {
+    font-family: var(--serif);
+    font-size: clamp(30px, 5vw, 44px);
+    font-weight: 600;
+    line-height: 1.1;
+    margin: 0 0 12px;
+    text-wrap: balance;
+    letter-spacing: -.015em;
+  }
+  .standfirst {
+    font-size: 17px;
+    color: var(--fg-mid);
+    max-width: 62ch;
+    margin: 0;
+  }
+  .standfirst em { color: var(--fg); font-style: italic; }
+
+  /* ---------- summary ---------- */
+  .summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1px;
+    background: var(--rule-soft);
+    border: 1px solid var(--rule-soft);
+    margin: 28px 0 0;
+  }
+  .stat { background: var(--bg); padding: 14px 16px; }
+  .stat .n {
+    font-family: var(--sans);
+    font-size: 26px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.1;
+    display: block;
+  }
+  .stat .k {
+    font-family: var(--sans);
+    font-size: 11px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+    display: block;
+    margin-top: 4px;
+  }
+  .stat.picked { background: var(--accent-bg); }
+  .stat.picked .n { color: var(--accent); }
+
+  /* ---------- controls ---------- */
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 22px 0 14px;
+    border-bottom: 1px solid var(--rule);
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    z-index: 5;
+  }
+  .filter-label {
+    font-family: var(--sans);
+    font-size: 11px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+    margin-right: 2px;
+  }
+  button.chip {
+    font-family: var(--sans);
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--fg-mid);
+    background: transparent;
+    border: 1px solid var(--rule);
+    padding: 5px 11px;
+    cursor: pointer;
+    line-height: 1.3;
+  }
+  button.chip:hover { border-color: var(--fg-dim); color: var(--fg); }
+  button.chip[aria-pressed="true"] {
+    background: var(--fg);
+    border-color: var(--fg);
+    color: var(--bg);
+  }
+  button.chip:focus-visible,
+  .row summary:focus-visible,
+  .copy:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .spacer { flex: 1 1 auto; }
+  .copy {
+    font-family: var(--sans);
+    font-size: 12.5px;
+    font-weight: 600;
+    background: var(--accent);
+    color: var(--bg);
+    border: none;
+    padding: 7px 14px;
+    cursor: pointer;
+  }
+  .copy:hover { filter: brightness(1.08); }
+
+  /* ---------- groups ---------- */
+  .group { margin-top: 40px; }
+  .group > h2 {
+    font-family: var(--sans);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+    margin: 0 0 2px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--rule);
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+  .group > h2 .note {
+    font-family: var(--serif);
+    font-size: 14px;
+    letter-spacing: 0;
+    text-transform: none;
+    font-weight: 400;
+    color: var(--fg-dim);
+    font-style: italic;
+  }
+
+  /* ---------- rows ---------- */
+  .row {
+    border-bottom: 1px solid var(--rule-soft);
+  }
+  .row summary {
+    display: grid;
+    grid-template-columns: 22px 46px 1fr auto auto;
+    align-items: baseline;
+    gap: 12px;
+    padding: 13px 0;
+    cursor: pointer;
+    list-style: none;
+  }
+  .row summary::-webkit-details-marker { display: none; }
+  .row[data-picked="true"] { background: var(--accent-bg); }
+  .row[data-picked="true"] summary { box-shadow: inset 3px 0 0 var(--accent); padding-left: 10px; }
+
+  .tick {
+    width: 16px; height: 16px;
+    border: 1.5px solid var(--rule);
+    background: var(--bg);
+    cursor: pointer;
+    position: relative;
+    top: 3px;
+    flex: none;
+    padding: 0;
+  }
+  .tick[aria-pressed="true"] {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+  .tick[aria-pressed="true"]::after {
+    content: "";
+    position: absolute;
+    left: 4px; top: 0px;
+    width: 4px; height: 9px;
+    border: solid var(--bg);
+    border-width: 0 2px 2px 0;
+    transform: rotate(43deg);
+  }
+  .tick[disabled] { opacity: .3; cursor: not-allowed; }
+
+  .ref {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--fg-dim);
+    font-variant-numeric: tabular-nums;
+  }
+  .name {
+    font-family: var(--serif);
+    font-size: 17px;
+    font-weight: 600;
+    line-height: 1.3;
+  }
+  .name .blurb {
+    display: block;
+    font-weight: 400;
+    font-size: 14.5px;
+    color: var(--fg-mid);
+    margin-top: 2px;
+    max-width: 68ch;
+  }
+  .row[data-status="dead"] .name { text-decoration: line-through; color: var(--dead); }
+  .row[data-status="dead"] .blurb { text-decoration: none; color: var(--dead); }
+
+  .status {
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: .04em;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .status::before {
+    content: "";
+    width: 7px; height: 7px;
+    background: currentColor;
+    flex: none;
+  }
+  .s-both   { color: var(--built); }
+  .s-web    { color: var(--partial); }
+  .s-mobile { color: var(--partial); }
+  .s-none   { color: var(--unbuilt); }
+  .s-dead   { color: var(--dead); }
+
+  .diff {
+    font-family: var(--sans);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: #fff;
+    padding: 3px 8px;
+    white-space: nowrap;
+  }
+  .d-trivial  { background: var(--pill-easy); }
+  .d-moderate { background: var(--pill-medium); }
+  .d-hard     { background: var(--pill-expert); }
+  .d-none     { background: transparent; color: var(--dead); border: 1px solid var(--rule); }
+
+  .detail {
+    padding: 4px 0 20px 84px;
+    max-width: 78ch;
+  }
+  .detail p { margin: 0 0 10px; font-size: 15px; color: var(--fg-mid); }
+  .detail p:last-child { margin-bottom: 0; }
+  .detail strong {
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+    display: block;
+    margin-bottom: 3px;
+  }
+  .detail code, .where code {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    background: var(--surface-2);
+    padding: 1px 5px;
+    color: var(--fg);
+  }
+  .detail pre {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    background: var(--surface);
+    border-left: 2px solid var(--rule);
+    padding: 10px 12px;
+    overflow-x: auto;
+    margin: 0 0 10px;
+    line-height: 1.5;
+    color: var(--fg-mid);
+  }
+  .where {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--fg-dim);
+    margin-bottom: 10px;
+  }
+
+  .hidden { display: none !important; }
+
+  footer {
+    margin-top: 56px;
+    padding-top: 20px;
+    border-top: 2px solid var(--rule);
+    font-size: 14px;
+    color: var(--fg-dim);
+    max-width: 70ch;
+  }
+  footer p { margin: 0 0 8px; }
+
+  @media (max-width: 700px) {
+    .row summary { grid-template-columns: 22px 1fr; gap: 8px; }
+    .ref { grid-column: 2; font-size: 11px; }
+    .name { grid-column: 2; }
+    .status, .diff { grid-column: 2; justify-self: start; margin-top: 2px; }
+    .detail { padding-left: 30px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+
+<div class="wrap">
+  <header class="masthead">
+    <p class="eyebrow">memo-poc → Kitaplık</p>
+    <h1>Port Ledger</h1>
+    <p class="standfirst">
+      Every feature in the legacy web prototype and Expo app, with what it actually does and
+      what it costs to rebuild in Kotlin&nbsp;/&nbsp;Compose. The three layers are <em>not</em> at
+      parity: the web build has six modes, the mobile app has four, and the design docs describe
+      six more that were never built anywhere. Tick what's worth carrying over.
+    </p>
+
+    <div class="summary">
+      <div class="stat"><span class="n" id="stat-total">0</span><span class="k">Features</span></div>
+      <div class="stat"><span class="n" id="stat-built">0</span><span class="k">Built somewhere</span></div>
+      <div class="stat"><span class="n" id="stat-none">0</span><span class="k">Designed only</span></div>
+      <div class="stat"><span class="n" id="stat-dead">0</span><span class="k">Obsolete now</span></div>
+      <div class="stat picked"><span class="n" id="stat-picked">0</span><span class="k">Selected</span></div>
+      <div class="stat picked"><span class="n" id="stat-effort">0</span><span class="k">Effort points</span></div>
+    </div>
+  </header>
+
+  <div class="controls">
+    <span class="filter-label">Show</span>
+    <button class="chip" data-filter="all" aria-pressed="true">Everything</button>
+    <button class="chip" data-filter="built" aria-pressed="false">Built</button>
+    <button class="chip" data-filter="none" aria-pressed="false">Never built</button>
+    <button class="chip" data-filter="trivial" aria-pressed="false">Cheap wins</button>
+    <button class="chip" data-filter="picked" aria-pressed="false">Selected</button>
+    <span class="spacer"></span>
+    <button class="copy" id="copy-btn">Copy selection</button>
+  </div>
+
+  <main id="ledger"></main>
+
+  <footer>
+    <p><strong style="font-family:var(--sans);font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--fg-dim);display:block;margin-bottom:6px;">Reading the ledger</strong></p>
+    <p>Effort points are relative, not days: trivial&nbsp;=&nbsp;1, moderate&nbsp;=&nbsp;3, hard&nbsp;=&nbsp;8. They
+      compare features against each other, nothing more.</p>
+    <p>Selections are stored in this browser only. <em>Copy selection</em> puts the chosen
+      reference labels on your clipboard so they can be pasted straight back into the conversation.</p>
+  </footer>
+</div>
+
+<script>
+const EFFORT = { trivial: 1, moderate: 3, hard: 8, none: 0 };
+
+const STATUS_LABEL = {
+  both:   "web + mobile",
+  web:    "web only",
+  mobile: "mobile only",
+  none:   "designed only",
+  dead:   "obsolete"
+};
+
+const DATA = [
+  { group: "Memorization modes", note: "Active recall, ordered least to most demanding", items: [
+
+    { ref: "A", name: "Spread blanking", status: "web", diff: "moderate",
+      blurb: "Whole text visible with a chosen percentage of words hidden behind tappable boxes.",
+      where: "spread.html · data.js:139 · sampling.ts (ported to mobile but never wired up)",
+      detail: `<p><strong>How it works</strong>Slider sets hide density (default 40%). Each line is
+        sampled <em>independently</em> — <code>target = round(words × pct)</code>, and a line whose target
+        rounds to zero is skipped entirely. That per-line pass is what keeps blanks spread across the
+        whole text instead of clumping in dense paragraphs. Reshuffle re-rolls at the same density.</p>
+        <p><strong>Port note</strong>The sampler is pure logic. The cost is Compose: per-word tap targets
+        inside flowing text need <code>buildAnnotatedString</code> with clickable annotations, and reveal
+        state must be a set of indices so recomposition stays scoped rather than rebuilding the page.</p>` },
+
+    { ref: "B", name: "First letters", status: "both", diff: "moderate",
+      blurb: "Every word collapses to its initial; the rest is masked. Tap a word to reveal it.",
+      where: "first-letter.html · mobile/app/first-letter.tsx",
+      detail: `<p><strong>How it works</strong>Words split into <code>{lead, firstLetter, rest, trail}</code>
+        so <code>(Doğu,</code> renders correctly. The web build makes the remainder <em>transparent</em>, so
+        line lengths and word widths survive as a memory cue; a "dots" toggle swaps to <code>·</code> which
+        deliberately destroys the letter-count cue. Mobile uses visible underscores instead — the web
+        behaviour is better.</p>
+        <p><strong>Port note</strong>Same per-word tap problem as spread. Compose does the transparent-rest
+        trick natively with <code>SpanStyle(color = Color.Transparent)</code>.</p>` },
+
+    { ref: "C", name: "Focus mode", status: "web", diff: "trivial",
+      blurb: "Four lines at a time, large and centered, every word hidden. Reveal one line at a time.",
+      where: "focus.html",
+      detail: `<p><strong>How it works</strong>A four-line window with no percentage — everything in the
+        chunk is hidden. "Reveal next line" finds the first line still holding a hidden word and reveals
+        that whole line, giving progressive disclosure rather than word-by-word poking. Arrows step the
+        window by four.</p>
+        <p><strong>Port note</strong>The cheapest mode to build: four <code>Text</code> composables, a chunk
+        index, and the same tap mapping. Never existed on mobile at all.</p>` },
+
+    { ref: "D", name: "Type it out", status: "both", diff: "hard",
+      blurb: "Type the text from memory. Punctuation is free; a wrong letter will not advance.",
+      where: "typing.html · mobile/app/typing.tsx",
+      detail: `<p><strong>How it works</strong>Only letters must be typed — spaces, punctuation and line
+        breaks auto-satisfy. A wrong key flashes red and <em>does not advance</em>, so you cannot run past
+        an error. Revealing a letter or a word each count as a mistake. Mobile renders only a 30-line
+        window around the cursor, found by binary search on position — that's the fix for the web build's
+        half-million spans.</p>
+        <p><strong>Port note</strong>The matching logic is trivial; keystroke capture is the one genuinely
+        hard port in the whole codebase. Android has no clean invisible keystroke sink, and a Turkish IME
+        with autocorrect and composition will fight a naive text field.</p>` },
+  ]},
+
+  { group: "Reading modes", note: "Aids rather than tests — these grade nothing", items: [
+
+    { ref: "E", name: "RSVP speed reading", status: "both", diff: "moderate",
+      blurb: "One word at a time at a fixed screen position, 100–1000 wpm.",
+      where: "rsvp.html · mobile/app/rsvp.tsx",
+      detail: `<p><strong>How it works</strong>The web build pins the optimal recognition point to the exact
+        screen centre with a three-column grid, so your eye never moves — that is the entire point of RSVP.
+        Mobile just centres the whole word and tints one character, which loses the benefit. Pauses stretch
+        on punctuation (2.2× after a full stop, 1.5× after a comma). The web version also prints a nine-word
+        context line underneath in muted italic.</p>
+        <p><strong>Port note</strong>Two divergent implementations to reconcile: two different ORP formulas
+        and two different timing formulas. Take the web's fixed-position layout and mobile's word-length
+        compensation.</p>` },
+
+    { ref: "F", name: "Bionic reading", status: "both", diff: "trivial",
+      blurb: "Bolds the first half of each word so the eye anchors and the brain autocompletes.",
+      where: "bionic.html · mobile/app/bionic.tsx",
+      detail: `<p><strong>How it works</strong>Bold length is <code>ceil(letters × pct)</code>, minimum one
+        character. Three-tone rendering matters as much as the bolding: punctuation muted, prefix bold and
+        full-strength, remainder dimmed. Web has a 20–80% slider; mobile has 30/50/70 presets.</p>
+        <p><strong>Port note</strong>Straight <code>buildAnnotatedString</code>. Watch span count on an
+        800-word page — split per line into a <code>LazyColumn</code>, which you want for scrolling anyway.</p>` },
+  ]},
+
+  { group: "Text handling", note: "Pure logic — the cheapest and most valuable things to lift", items: [
+
+    { ref: "T", name: "Inhibition sampling", status: "web", diff: "trivial",
+      blurb: "Picks which words to hide so they repel each other — evenly spread but still random.",
+      where: "data.js:105 · sampling.ts",
+      detail: `<p><strong>How it works</strong>Weighted roulette, then a Gaussian suppression around each
+        pick so neighbours become unlikely:</p>
+        <pre>falloff = strength × exp(−d² / 2σ²)
+weights[j] *= (1 − falloff)      // strength 0.9
+σ = max(0.8, n / 2·target)       // half the expected gap</pre>
+        <p>A slot flanked by two picks gets suppressed twice. This is the most distinctive piece of logic
+        in the codebase and it is forty lines.</p>
+        <p><strong>Port note</strong>Direct translation, pure function, trivially unit-testable.</p>` },
+
+    { ref: "S", name: "Turkish letter folding", status: "both", diff: "trivial",
+      blurb: "Treats ı/İ/i/I, ö/o, ü/u, ş/s, ğ/g, ç/c and circumflexes as the same letter when matching.",
+      where: "typing.html:96 · mobile/src/data/canonicalize.ts",
+      detail: `<p><strong>How it works</strong>Eight groups, each folding to its first character lowercased.
+        The <code>iIıİîÎ</code> group is the important one — it collapses all four Turkish i-forms, so an
+        English keyboard can satisfy a dotless <code>ı</code>. Circumflexes fold too, so <code>kâğıt</code>
+        accepts <code>kagit</code>. Applied per character in typing mode only; every other mode is
+        display-only and never compares strings.</p>
+        <p><strong>Port note</strong>Trivial, with one landmine: Kotlin's <code>lowercase()</code> under a
+        Turkish locale turns <code>I</code> into <code>ı</code>, silently changing behaviour. Use an explicit
+        map and <code>Locale.ROOT</code> for the fallback.</p>` },
+
+    { ref: "V", name: "Pagination", status: "both", diff: "trivial",
+      blurb: "Splits long text into ~800-word pages, breaking only at paragraph boundaries.",
+      where: "data.js:256 · duplicated twice in mobile with different constants",
+      detail: `<p><strong>How it works</strong>Accumulates words and closes a page only once the target is
+        passed <em>and</em> the current line is blank, so a break never lands mid-paragraph. A short tail
+        merges back into the previous page instead of becoming a runt.</p>
+        <p><strong>Port note</strong>Mobile has two copies at 350 and 800 words and neither implements the
+        tail merge — which means a bookmark's page number means different things in different modes. Build
+        one paginator. The docs also propose biasing breaks toward chapter headings, worth doing from day
+        one with a Drive library full of real books.</p>` },
+
+    { ref: "G", name: "Tokenizer", status: "both", diff: "trivial",
+      blurb: "Splits text into words, spaces and breaks while preserving whitespace exactly.",
+      where: "data.js:70 · mobile/src/data/tokenize.ts (dead code)",
+      detail: `<p><strong>How it works</strong>Splits on whitespace with a capturing group so runs survive as
+        their own tokens, and flags a token as a word if it contains any letter anywhere — so
+        <code>don't</code> and <code>(Doğu,</code> are words, <code>—</code> and <code>123</code> are not.
+        Keeps a per-line index map that every mode uses for paging and chunking.</p>
+        <p><strong>Port note</strong>Forty lines. Prefer <code>Character.isLetter</code> over a regex for
+        correct Turkish code-point handling.</p>` },
+
+    { ref: "W", name: "EPUB text extraction", status: "mobile", diff: "moderate",
+      blurb: "Pulls readable prose out of an EPUB in correct chapter order.",
+      where: "mobile/src/data/loadFile.ts",
+      detail: `<p><strong>How it works</strong>Unzip, read <code>META-INF/container.xml</code> to find the
+        OPF, build an id→href map from the manifest, then walk the spine to get true reading order, and
+        convert each chapter's HTML to text. Regex-based XML parsing with no namespace handling — fragile,
+        but it works.</p>
+        <p><strong>Port note</strong>Actually <em>easier</em> in Kotlin: <code>ZipInputStream</code> plus a
+        real XML parser beats hand-rolled regex. Still needed — the Drive library holds 13 EPUBs. The
+        document <em>picker</em> around it is obsolete.</p>` },
+
+    { ref: "U", name: "Markdown / HTML cleaning", status: "both", diff: "trivial",
+      blurb: "Strips markup, entities and stray whitespace down to plain prose.",
+      where: "data.js:154 · loadFile.ts:11",
+      detail: `<p><strong>How it works</strong>HTML first (block tags become newlines, entities decode),
+        then markdown, then whitespace tidying. Two implementations that differ slightly; the mobile one has
+        a bug using <code>fromCharCode</code> for numeric entities, so astral-plane characters break.</p>
+        <p><strong>Port note</strong>Still needed for whatever comes out of Drive, but it should run once at
+        import rather than lazily on every read behind a global toggle as the web build does.</p>` },
+  ]},
+
+  { group: "Persistence", note: "Shapes worth keeping; the storage engines are not", items: [
+
+    { ref: "AA", name: "Continue where you left off", status: "mobile", diff: "trivial",
+      blurb: "Per-text, per-mode resume point surfaced as a one-tap Continue row.",
+      where: "mobile/src/data/storage.ts:78 · every mobile screen",
+      detail: `<p><strong>How it works</strong>Each mode saves a different field — page, character position,
+        or word index — debounced around half a second. The home screen shows the single most recently
+        touched mode for each text: <code>↺ Continue: Type it out · position 4213</code>. Restoring typing
+        marks every letter before the position as typed, so the progress bar returns but the mistake count
+        resets.</p>
+        <p><strong>Port note</strong>A Room table keyed on text plus mode, and a debounced snapshot flow.
+        The single best UX idea in the mobile app.</p>` },
+
+    { ref: "AB", name: "Bookmarks", status: "mobile", diff: "trivial",
+      blurb: "Save a position with a text preview; jump back from the home screen.",
+      where: "storage.ts:136 · first-letter.tsx · bionic.tsx",
+      detail: `<p><strong>How it works</strong>Two ways in: a button that bookmarks the page, or a long-press
+        on any line that also records which line. Home screen groups them by text with a 40-character
+        preview. Only exists in the two paginated modes.</p>
+        <p><strong>Port note</strong>Trivial. Finish the half-built part: the line index is stored but never
+        used on the way back, so you land on the page rather than the line.</p>` },
+
+    { ref: "AD", name: "Font scaling", status: "mobile", diff: "trivial",
+      blurb: "A− / A+ controls scaling reading text from 0.8× to 1.8×.",
+      where: "mobile/src/hooks/useFontScale.ts",
+      detail: `<p><strong>How it works</strong>A persisted multiplier applied to hard-coded base sizes at
+        every call site.</p>
+        <p><strong>Port note</strong>Make it a <code>CompositionLocal</code> rather than multiplying
+        literals in twelve places, and consider honouring the system font scale as the base. Note the
+        legacy bug not to reproduce: saving the scale overwrites the whole preferences object and silently
+        drops the theme.</p>` },
+
+    { ref: "AC", name: "Reader preferences", status: "web", diff: "trivial",
+      blurb: "Font, theme, size, line height, letter and word spacing, column width.",
+      where: "data.js:215 · reader.js",
+      detail: `<p><strong>How it works</strong>One JSON blob written on every control change. On the web
+        it lives in session storage, so it survives moving between modes but dies with the tab.</p>
+        <p><strong>Port note</strong>DataStore. Trivial.</p>` },
+  ]},
+
+  { group: "Interface", note: "Patterns worth keeping even where the implementation isn't", items: [
+
+    { ref: "AE", name: "Three reading themes", status: "web", diff: "trivial",
+      blurb: "Sepia, neutral dark and paper light, as fourteen named colour tokens.",
+      where: "style.css:1 · mobile/src/theme/colors.ts (sepia only)",
+      detail: `<p><strong>How it works</strong>Fourteen CSS variables cover background, text, muted text,
+        accent, blank fill and border, revealed green, hint amber, and panel surfaces. Applied before first
+        paint so there's no flash. Mobile hard-codes sepia and never reads the theme preference at all.</p>
+        <p><strong>Port note</strong>The palettes are a genuine asset — this document is built from them.
+        Lift the three verbatim into a colour scheme and add system-dark detection.</p>` },
+
+    { ref: "AF", name: "Reader options panel", status: "web", diff: "moderate",
+      blurb: "A settings panel that shows only the controls the current mode actually supports.",
+      where: "reader.js",
+      detail: `<p><strong>How it works</strong>A declarative schema of controls, and each mode passes an
+        allow-list. Typing gets no font control because it forces monospace; focus gets no size or width
+        because its layout is fixed; RSVP gets almost nothing. Bionic adds its bold-percentage slider and
+        opens the panel by default.</p>
+        <p><strong>Port note</strong>Port the <em>pattern</em>, not the DOM injection: a bottom sheet driven
+        by a list of option definitions with a per-mode allow-list. Mobile has no settings panel at all.</p>` },
+
+    { ref: "AL", name: "Position handoff between modes", status: "mobile", diff: "trivial",
+      blurb: "Switch between speed reading and normal reading without losing your place.",
+      where: "rsvp.tsx · bionic.tsx",
+      detail: `<p><strong>How it works</strong>Converts a page boundary into a word index and back by
+        accumulating word counts. It uses a bespoke whitespace-run counter specifically so its notion of a
+        word matches RSVP's, because the app's normal word count uses letter-runs and would drift.</p>
+        <p><strong>Port note</strong>Pure arithmetic, and the best original idea in the mobile app. Worth
+        generalising to one character-offset position type that every mode converts to and from — which
+        also kills the three-competing-definitions-of-word problem.</p>` },
+
+    { ref: "AG", name: "Difficulty taxonomy", status: "both", diff: "trivial",
+      blurb: "Modes labelled Beginner → Medium → Hard → Impossible, plus Reading aid.",
+      where: "index.html:85 · mobile/app/index.tsx",
+      detail: `<p><strong>How it works</strong>Modes are grouped into "Memorize — active recall, practice
+        from least to most demanding" and "Fast read — reading aids", each with a coloured difficulty pill.
+        It tells a new user what to try first, which no amount of mode naming does on its own.</p>
+        <p><strong>Port note</strong>Trivial, and a real design asset. The pill colours are reused in this
+        very document.</p>` },
+
+    { ref: "AK", name: "Long-text rendering", status: "both", diff: "trivial",
+      blurb: "Keeping a 570 KB book scrollable without dying.",
+      where: "style.css:97 · typing.tsx:84",
+      detail: `<p><strong>How it works</strong>Two different strategies: the web leans on
+        <code>content-visibility: auto</code> to skip off-screen layout; mobile windows explicitly to about
+        thirty lines around the cursor, locating it by binary search.</p>
+        <p><strong>Port note</strong>One of the few places Compose is simply easier — a keyed
+        <code>LazyColumn</code> recycles for free. Keep the binary-search-for-cursor-line idea for typing.</p>` },
+
+    { ref: "AU", name: "Haptics on typing", status: "none", diff: "trivial",
+      blurb: "A light tick on a correct key, a heavier buzz on a mistake.",
+      where: "docs/mobile.md — native-only wishlist",
+      detail: `<p><strong>Port note</strong>One line with <code>LocalHapticFeedback</code>, and typing mode
+        is exactly the place where per-keystroke feedback earns its keep. Cheapest good idea in the docs.</p>` },
+
+    { ref: "AV", name: "Turkish-safe typography", status: "none", diff: "trivial",
+      blurb: "Bundle a serif that actually covers ı İ ğ Ğ ş Ş ç Ç ö Ö ü Ü.",
+      where: "docs/mobile.md",
+      detail: `<p><strong>How it works</strong>The web build's default serif is iOS-only, so Android silently
+        falls back. The docs recommend bundling Source Serif 4 (open licence, full Latin Extended-A) with
+        Noto Serif as fallback, and Inter for typing input. Roboto already covers Turkish, so the serif is
+        the only extra weight in the APK.</p>
+        <p><strong>Port note</strong>Drop the font files in and build a <code>FontFamily</code>. Check
+        <code>ğ</code> and <code>İ</code> in monospace at small sizes.</p>` },
+  ]},
+
+  { group: "Designed but never built", note: "Specified in the docs, no code anywhere", items: [
+
+    { ref: "AO", name: "Speak it — recite aloud, scored live", status: "none", diff: "hard",
+      blurb: "Recite from memory while speech recognition highlights each word correct, skipped or wrong.",
+      where: "docs/speak-mode.md (371 lines) · docs/speech.md (198 lines)",
+      detail: `<p><strong>How it works</strong>A cursor walks only the scoreable words, so punctuation is
+        skipped automatically. Each heard word runs a cascade: exact match, then a three-word lookahead that
+        marks intermediates as skipped, then a fuzzy edit-distance match, and only then a mistake — with a
+        300 ms cooldown so one fumbled word cannot log two errors. Three sensitivity modes; interim results
+        paint live and can be rewritten when the final transcript arrives. Ends on a word-level diff showing
+        what the recognizer actually heard.</p>
+        <p><strong>Port note</strong>The scoring engine is around two hundred lines of pure, testable Kotlin.
+        Everything hard is platform: Android's recognizer ends each session on end-of-speech so it needs a
+        restart supervisor, partial results arrive as whole hypotheses rather than deltas, and devices
+        without Google services need an offline fallback. Budget it as its own milestone.</p>` },
+
+    { ref: "AP", name: "Audio recite", status: "none", diff: "moderate",
+      blurb: "The app reads aloud with a word-level highlight; three sub-modes escalate the challenge.",
+      where: "docs/audio-mode.md (363 lines)",
+      detail: `<p><strong>How it works</strong>Read-along tracks the highlight continuously. Echo reads a
+        line then waits for you to say it back. Drop-out is the interesting one: each pass speaks less of
+        every line — 100%, then 80%, then 50%, then nothing — while the highlight keeps scrolling across the
+        silent tail so rhythm survives and the dimmed text tells you what to fill in.</p>
+        <p><strong>Port note</strong>Easier on Android than the docs assume: <code>onRangeStart</code> gives
+        exact word ranges natively, so the elaborate time-interpolation fallback designed for the web isn't
+        needed. Real work is the state machine and audio focus.</p>` },
+
+    { ref: "AQ", name: "Spaced repetition", status: "none", diff: "hard",
+      blurb: "Schedules which text to review when, grading harder modes more strictly.",
+      where: "docs/srs.md (351 lines)",
+      detail: `<p><strong>How it works</strong>The unit is a whole text, not a flashcard. Different modes
+        produce differently trustworthy signals, so a session score is weighted by mode before becoming a
+        rating:</p>
+        <pre>typing 1.00 · focus 0.85 · first-letter 0.65 · spread 0.45
+reading aids emit no rating at all
+
+s_eff = 1 − w × (1 − s)</pre>
+        <p>So 70% in spread reads as "Good" while the same 70% in typing reads as "Hard" — passing the
+        strongest test means more.</p>
+        <p><strong>Port note</strong>The wrapper is straightforward; the algorithm isn't. There is no mature
+        Kotlin port of FSRS, so it's hand-porting the formulas, a native binding, or the docs' own advice —
+        ship the fifty-line simple scheduler first and learn what UI works before caring which algorithm
+        sits behind it.</p>` },
+
+    { ref: "AR1", name: "Cumulative recall", status: "none", diff: "trivial",
+      blurb: "Recite line 1, then 1+2, then 1+2+3 — a growing window.",
+      where: "docs/features.md §1",
+      detail: `<p><strong>Why it matters</strong>The docs call this the strongest verbatim-recall protocol in
+        the literature, and the missing third rung between first-letters and focus.</p>
+        <p><strong>Port note</strong>It is focus mode with a growing window instead of a sliding one. If you
+        build focus, this is nearly free.</p>` },
+
+    { ref: "AR2", name: "Backward chaining", status: "none", diff: "trivial",
+      blurb: "The same ladder built from the last line backwards, so you always end on familiar ground.",
+      where: "docs/features.md §1",
+      detail: `<p><strong>Port note</strong>A direction toggle on cumulative recall. Effectively free once
+        that exists.</p>` },
+
+    { ref: "AR3", name: "Copy-recite-check", status: "none", diff: "moderate",
+      blurb: "Type freely from memory, then get a word-level diff of what you got wrong.",
+      where: "docs/features.md §1",
+      detail: `<p><strong>Why it matters</strong>Complements typing mode, which blocks on every error and so
+        never lets you find out what you'd have written unaided.</p>
+        <p><strong>Port note</strong>Needs a diff utility — which speak mode's results screen also wants, so
+        build it once and both features get cheaper.</p>` },
+
+    { ref: "AR4", name: "Typing tolerance toggles", status: "none", diff: "trivial",
+      blurb: "Optionally switch off the Turkish letter folding to test whether you really know ı vs i.",
+      where: "docs/features.md §1",
+      detail: `<p><strong>Why it matters</strong>The folding is always on today, which means you can never
+        verify you actually know the diacritics — only that you know the letters underneath them.</p>` },
+  ]},
+
+  { group: "Obsolete under a Drive library", note: "All of it exists to answer “how does text get in”", items: [
+
+    { ref: "AM", name: "Add-text form and paste flow", status: "dead", diff: "none",
+      blurb: "Title, textarea, Clean button and a live word-count readout.",
+      where: "index.html:16 · mobile/app/index.tsx:246",
+      detail: `<p>The library is Drive now; there is no paste-a-poem flow. The per-book
+        <code>N lines · M words</code> metadata survives, because that's library display rather than
+        input.</p>` },
+
+    { ref: "Y", name: "Local text CRUD and slug ids", status: "dead", diff: "none",
+      blurb: "Add, delete, slugify and de-duplicate locally stored texts.",
+      where: "data.js:21 · storage.ts:12",
+      detail: `<p>Catalog ids and Drive file ids replace locally generated slugs entirely. Deleting a book
+        now means deleting it in Drive.</p>` },
+
+    { ref: "AS1", name: "Bundled sample texts", status: "dead", diff: "none",
+      blurb: "1.2 MB of Turkish prose compiled into the binary, twice.",
+      where: "samples.js · mobile/src/data/samples.ts",
+      detail: `<p>Both copies exist purely because there was no library. Removing them also kills the
+        undeletable-sample special case and the PowerShell regeneration ritual in the mobile README.</p>` },
+
+    { ref: "AS2", name: "PWA wrapper and backend design", status: "dead", diff: "none",
+      blurb: "Service worker, manifest, and a Cloudflare Workers + D1 sync backend.",
+      where: "docs/pwa.md (464 lines) · docs/backend.md (298 lines)",
+      detail: `<p>Native Kotlin makes the PWA moot. Of the backend design, only the progress and session
+        table shapes are reusable as Room entities — Drive already solves storage, sync and sharing.</p>` },
+  ]},
+];
+
+/* ---------------- render ---------------- */
+
+const KEY = "kitaplik.port-ledger.v1";
+let picked = new Set();
+try { picked = new Set(JSON.parse(localStorage.getItem(KEY) || "[]")); } catch (e) {}
+
+const ledger = document.getElementById("ledger");
+const allItems = DATA.flatMap(g => g.items);
+
+DATA.forEach(group => {
+  const section = document.createElement("section");
+  section.className = "group";
+  const h2 = document.createElement("h2");
+  h2.innerHTML = `<span>${group.group}</span><span class="note">${group.note}</span>`;
+  section.appendChild(h2);
+
+  group.items.forEach(item => {
+    const row = document.createElement("details");
+    row.className = "row";
+    row.dataset.ref = item.ref;
+    row.dataset.status = item.status;
+    row.dataset.diff = item.diff;
+    row.dataset.picked = picked.has(item.ref) ? "true" : "false";
+
+    const selectable = item.status !== "dead";
+    row.innerHTML = `
+      <summary>
+        <button class="tick" type="button" aria-pressed="${picked.has(item.ref)}"
+                aria-label="Select ${item.name}" ${selectable ? "" : "disabled"}></button>
+        <span class="ref">${item.ref}</span>
+        <span class="name">${item.name}<span class="blurb">${item.blurb}</span></span>
+        <span class="status s-${item.status}">${STATUS_LABEL[item.status]}</span>
+        <span class="diff d-${item.diff}">${item.diff === "none" ? "drop" : item.diff}</span>
+      </summary>
+      <div class="detail">
+        <p class="where">${item.where}</p>
+        ${item.detail}
+      </div>`;
+
+    const tick = row.querySelector(".tick");
+    tick.addEventListener("click", ev => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      if (!selectable) return;
+      if (picked.has(item.ref)) picked.delete(item.ref); else picked.add(item.ref);
+      tick.setAttribute("aria-pressed", picked.has(item.ref));
+      row.dataset.picked = picked.has(item.ref) ? "true" : "false";
+      save();
+      refresh();
+    });
+
+    section.appendChild(row);
+  });
+
+  ledger.appendChild(section);
+});
+
+function save() {
+  try { localStorage.setItem(KEY, JSON.stringify([...picked])); } catch (e) {}
+}
+
+function refresh() {
+  const n = s => allItems.filter(s).length;
+  document.getElementById("stat-total").textContent  = allItems.length;
+  document.getElementById("stat-built").textContent  = n(i => ["both","web","mobile"].includes(i.status));
+  document.getElementById("stat-none").textContent   = n(i => i.status === "none");
+  document.getElementById("stat-dead").textContent   = n(i => i.status === "dead");
+  document.getElementById("stat-picked").textContent = picked.size;
+  document.getElementById("stat-effort").textContent =
+    allItems.filter(i => picked.has(i.ref)).reduce((t, i) => t + EFFORT[i.diff], 0);
+}
+
+/* ---------------- filters ---------------- */
+
+let filter = "all";
+document.querySelectorAll(".chip").forEach(chip => {
+  chip.addEventListener("click", () => {
+    filter = chip.dataset.filter;
+    document.querySelectorAll(".chip").forEach(c =>
+      c.setAttribute("aria-pressed", c === chip));
+    applyFilter();
+  });
+});
+
+function applyFilter() {
+  document.querySelectorAll(".row").forEach(row => {
+    const { status, diff, ref } = row.dataset;
+    let show = true;
+    if (filter === "built")   show = ["both","web","mobile"].includes(status);
+    if (filter === "none")    show = status === "none";
+    if (filter === "trivial") show = diff === "trivial" && status !== "dead";
+    if (filter === "picked")  show = picked.has(ref);
+    row.classList.toggle("hidden", !show);
+  });
+  document.querySelectorAll(".group").forEach(g => {
+    const any = [...g.querySelectorAll(".row")].some(r => !r.classList.contains("hidden"));
+    g.classList.toggle("hidden", !any);
+  });
+}
+
+/* ---------------- copy ---------------- */
+
+document.getElementById("copy-btn").addEventListener("click", async ev => {
+  const btn = ev.currentTarget;
+  const chosen = allItems.filter(i => picked.has(i.ref));
+  const text = chosen.length
+    ? "Build these:\n" + chosen.map(i =>
+        `${i.ref} — ${i.name} (${i.diff})`).join("\n") +
+      `\n\nTotal: ${chosen.length} features, ` +
+      `${chosen.reduce((t, i) => t + EFFORT[i.diff], 0)} effort points`
+    : "Nothing selected yet.";
+  try {
+    await navigator.clipboard.writeText(text);
+    btn.textContent = "Copied";
+  } catch (e) {
+    btn.textContent = "Press ⌘/Ctrl+C";
+  }
+  setTimeout(() => { btn.textContent = "Copy selection"; }, 1800);
+});
+
+refresh();
+</script>
