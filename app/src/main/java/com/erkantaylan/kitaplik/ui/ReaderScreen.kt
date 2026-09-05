@@ -42,6 +42,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.erkantaylan.kitaplik.reader.BookmarkToggle
 import com.erkantaylan.kitaplik.reader.ReaderViewModel
 import com.erkantaylan.kitaplik.reader.formatDuration
 import com.erkantaylan.kitaplik.ui.theme.Palette
@@ -235,11 +236,15 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                                         // mark lands on the word under the finger.
                                         val result = layout ?: return@detectTapGestures
                                         val index = result.getOffsetForPosition(position)
-                                        val added =
+                                        val what =
                                             viewModel.toggleBookmarkAt(paragraph.index, index)
                                         Toast.makeText(
                                             context,
-                                            if (added) "Bookmarked" else "Bookmark removed",
+                                            when (what) {
+                                                BookmarkToggle.ADDED -> "Bookmarked"
+                                                BookmarkToggle.REMOVED -> "Bookmark removed"
+                                                BookmarkToggle.NO_WORD -> "No word there"
+                                            },
                                             Toast.LENGTH_SHORT,
                                         ).show()
                                     },

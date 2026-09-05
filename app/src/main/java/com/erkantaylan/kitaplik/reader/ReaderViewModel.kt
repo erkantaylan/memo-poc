@@ -13,6 +13,12 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.io.File
 
+/** How far a long press may reach for a word before giving up. */
+private const val NEAREST_WORD_REACH = 48
+
+/** What a long press did, so the reader can say so. */
+enum class BookmarkToggle { ADDED, REMOVED, NO_WORD }
+
 data class ReaderUiState(
     val loading: Boolean = true,
     val error: String? = null,
@@ -131,9 +137,11 @@ class ReaderViewModel(
      * character the touch landed on, which is expanded to the whole word so
      * the mark lands on something meaningful rather than mid-syllable.
      */
-    fun toggleBookmarkAt(paragraphIndex: Int, indexInParagraph: Int): Boolean {
-        val para = _state.value.book.paragraphs.getOrNull(paragraphIndex) ?: return false
+    fun toggleBookmarkAt(paragraphIndex: Int, indexInParagraph: Int): BookmarkToggle {
+        val para = _state.value.book.paragraphs.getOrNull(paragraphIndex)
+            ?: return BookmarkToggle.NO_WORD
         val (wordStart, wordEnd) = wordBoundsAt(para.text, indexInParagraph)
+            ?: return BookmarkToggle.NO_WORD
         val word = para.text.substring(wordStart, wordEnd)
 
         val added = bookmarks.toggle(
@@ -156,22 +164,57 @@ class ReaderViewModel(
             )
         )
         refreshBookmarks()
-        return added
+        return if (added) BookmarkToggle.ADDED else BookmarkToggle.REMOVED
     }
 
-    /** Expands a character index out to the word containing it. */
-    private fun wordBoundsAt(text: String, index: Int): Pair<Int, Int> {
-        if (text.isEmpty()) return 0 to 0
+    /**
+     * Expands a character index out to the word containing it.
+     *
+     * A finger is wider than a letter, so a long press regularly lands in the
+     * gap between words, on a full stop, or past the end of a short line. Those
+     * used to be bookmarked as themselves, which produced marks on a single
+     * space or a lone dot. Now the tap snaps to the nearest word instead, and
+     * returns null only when there is genuinely no word within reach — a rule
+     * of asterisks has nothing to mark.
+     */
+    private fun wordBoundsAt(text: String, index: Int): Pair<Int, Int>? {
+        if (text.isEmpty()) return null
         val i = index.coerceIn(0, text.length - 1)
-        if (!text[i].isLetterOrDigit()) {
-            // Landed on a space or punctuation: mark just that character.
-            return i to (i + 1)
-        }
-        var start = i
-        while (start > 0 && text[start - 1].isLetterOrDigit()) start--
-        var end = i + 1
-        while (end < text.length && text[end].isLetterOrDigit()) end++
+        val at = if (isWordChar(text, i)) i else nearestWordChar(text, i) ?: return null
+
+        var start = at
+        while (start > 0 && isWordChar(text, start - 1)) start--
+        var end = at + 1
+        while (end < text.length && isWordChar(text, end)) end++
         return start to end
+    }
+
+    /**
+     * Apostrophes bind when they sit between letters, so "don't" is one word
+     * and so is "İstanbul'da" — Turkish hangs suffixes off proper nouns that
+     * way constantly, and marking "İstanbul" while dropping "da" reads wrong.
+     */
+    private fun isWordChar(text: String, i: Int): Boolean {
+        val c = text[i]
+        if (c.isLetterOrDigit()) return true
+        if (c != '\'' && c != '\u2019') return false
+        return i > 0 && text[i - 1].isLetterOrDigit() &&
+            i + 1 < text.length && text[i + 1].isLetterOrDigit()
+    }
+
+    /**
+     * Nearest word character either side, ties going left: a press past the end
+     * of a line almost always means the last word on it, not the first word of
+     * the next one.
+     */
+    private fun nearestWordChar(text: String, from: Int): Int? {
+        for (d in 1..NEAREST_WORD_REACH) {
+            val left = from - d
+            if (left >= 0 && isWordChar(text, left)) return left
+            val right = from + d
+            if (right < text.length && isWordChar(text, right)) return right
+        }
+        return null
     }
 
     fun removeBookmark(id: String) {
