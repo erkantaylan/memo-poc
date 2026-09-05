@@ -14,6 +14,8 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.gestures.scrollBy
@@ -48,6 +50,7 @@ import androidx.compose.material3.SliderDefaults
 import com.erkantaylan.kitaplik.reader.BionicStrength
 import com.erkantaylan.kitaplik.reader.ReaderFont
 import com.erkantaylan.kitaplik.reader.ReaderStyle
+import com.erkantaylan.kitaplik.reader.TextAlignment
 import com.erkantaylan.kitaplik.reader.BookmarkToggle
 import com.erkantaylan.kitaplik.reader.bionicSpans
 import com.erkantaylan.kitaplik.reader.ReaderViewModel
@@ -281,6 +284,10 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                         fontSize = state.style.size.sp,
                         lineHeight = (state.style.size * state.style.lineHeight).sp,
                         letterSpacing = state.style.letterSpacing.em,
+                        textAlign = when (state.style.align) {
+                            TextAlignment.LEFT -> TextAlign.Start
+                            TextAlignment.JUSTIFY -> TextAlign.Justify
+                        },
                         fontFamily = when (state.style.font) {
                             ReaderFont.SERIF -> FontFamily.Serif
                             ReaderFont.SANS -> FontFamily.SansSerif
@@ -390,18 +397,15 @@ private fun ReaderBar(
 
 
 
-/** The panel's panes. Three, so none of them needs to scroll. */
-private enum class PanelTab(val label: String) {
-    READING("Reading"), TEXT("Text"), SPACING("Spacing")
-}
+/** Two panes. Spacing belongs under Text — it is a property of the setting. */
+private enum class PanelTab(val label: String) { READING("Reading"), TEXT("Text") }
 
 /**
  * The reading panel: how the page is set, tuned while you are looking at it.
  *
- * Split into panes rather than one long list. A panel tall enough to need
- * scrolling covers the prose it is changing, which defeats the reason it sits
- * over the text instead of in Settings — three short panes keep most of the
- * page visible while you drag a slider.
+ * The pane switcher is a row of tabs rather than a row of buttons, because
+ * these choose a view and the chips below them choose a value — two different
+ * jobs that should not look alike.
  */
 @Composable
 private fun ReadingPanel(
@@ -421,25 +425,21 @@ private fun ReadingPanel(
         Modifier
             .fillMaxWidth()
             .background(Palette.panel)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+            .padding(horizontal = 14.dp)
+            .padding(top = 4.dp, bottom = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            PanelTab.entries.forEach { tab ->
-                Chip("pane:${tab.name.lowercase()}", tab.label, tab == pane) { pane = tab }
-            }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+            PanelTab.entries.forEach { tab -> PaneTab(tab, tab == pane) { pane = tab } }
             Box(Modifier.weight(1f))
             Text(
                 "Reset",
                 color = Palette.textDim,
-                fontSize = 11.5.sp,
+                fontSize = 11.sp,
                 modifier = Modifier
                     .testTag("reset_style")
                     .clickableNoRipple(onReset)
-                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                    .padding(horizontal = 6.dp, vertical = 8.dp),
             )
         }
 
@@ -447,30 +447,32 @@ private fun ReadingPanel(
             PanelTab.READING -> {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text("Bionic reading", color = Palette.text, fontSize = 13.sp)
+                        Text("Bionic reading", color = Palette.text, fontSize = 12.5.sp)
                         Text("Weight the front of each word",
-                             color = Palette.textDim, fontSize = 10.5.sp)
+                             color = Palette.textDim, fontSize = 10.sp)
                     }
-                    Chip("bionic_toggle", if (bionic) "ON" else "OFF", bionic) {
-                        onBionic(!bionic)
-                    }
+                    Segmented("bionic_toggle", listOf("OFF" to false, "ON" to true),
+                              bionic) { onBionic(it) }
                 }
                 // Strength only means anything while bionic is on, so it travels
                 // with it rather than sitting live above an off switch.
-                if (bionic) ChipRow("Strength") {
-                    BionicStrength.entries.forEach { option ->
-                        Chip("strength:${option.name.lowercase()}", option.label,
-                             option == strength) { onStrength(option) }
-                    }
+                if (bionic) Labelled("Strength") {
+                    Segmented(
+                        "strength",
+                        BionicStrength.entries.map { it.label to it },
+                        strength, onStrength,
+                    )
                 }
             }
 
             PanelTab.TEXT -> {
-                ChipRow("Font") {
-                    ReaderFont.entries.forEach { font ->
-                        Chip("font:${font.name.lowercase()}", font.label,
-                             font == style.font) { onStyle(style.copy(font = font)) }
-                    }
+                Labelled("Font") {
+                    Segmented("font", ReaderFont.entries.map { it.label to it },
+                              style.font) { onStyle(style.copy(font = it)) }
+                }
+                Labelled("Align") {
+                    Segmented("align", TextAlignment.entries.map { it.label to it },
+                              style.align) { onStyle(style.copy(align = it)) }
                 }
                 Setting("Size", "${style.size.toInt()}", style.size,
                         ReaderStyle.SIZE, "size") { onStyle(style.copy(size = it)) }
@@ -478,9 +480,6 @@ private fun ReadingPanel(
                         style.lineHeight, ReaderStyle.LINE_HEIGHT, "line_height") {
                     onStyle(style.copy(lineHeight = it))
                 }
-            }
-
-            PanelTab.SPACING -> {
                 Setting("Letter", String.format("%.2f", style.letterSpacing),
                         style.letterSpacing, ReaderStyle.LETTER_SPACING, "letter_spacing") {
                     onStyle(style.copy(letterSpacing = it))
@@ -496,35 +495,81 @@ private fun ReadingPanel(
     }
 }
 
+/** A tab: a word with a rule under it when it is the one you are looking at. */
 @Composable
-private fun ChipRow(label: String, chips: @Composable () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalAlignment = Alignment.CenterVertically,
+private fun PaneTab(tab: PanelTab, active: Boolean, onClick: () -> Unit) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .testTag("pane:${tab.name.lowercase()}")
+            .clickableNoRipple(onClick)
+            .padding(end = 18.dp)
+            // Sized to its own label. Without this the rule below fills the
+            // whole Row and the first tab shoulders every sibling off-screen.
+            .width(IntrinsicSize.Max),
     ) {
-        Text(label, color = Palette.textDim, fontSize = 11.5.sp, modifier = Modifier.weight(1f))
-        chips()
+        Text(
+            tab.label,
+            color = if (active) Palette.text else Palette.textDim,
+            fontSize = 13.sp,
+            fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+            modifier = Modifier.padding(top = 6.dp, bottom = 5.dp),
+        )
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(2.dp)
+                .background(if (active) Palette.accent else Palette.panel)
+        )
     }
 }
 
 @Composable
-private fun Chip(tag: String, label: String, active: Boolean, onClick: () -> Unit) {
-    Text(
-        label,
-        color = if (active) Palette.accent else Palette.textDim,
-        fontSize = 11.5.sp,
-        fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
-        modifier = Modifier
-            .testTag(tag)
-            .clip(RoundedCornerShape(6.dp))
-            .background(if (active) Palette.bookmark else Palette.panel2)
-            .clickableNoRipple(onClick)
-            .padding(horizontal = 11.dp, vertical = 5.dp),
-    )
+private fun Labelled(label: String, control: @Composable () -> Unit) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, color = Palette.textDim, fontSize = 11.sp,
+             modifier = Modifier.width(84.dp))
+        control()
+    }
 }
 
-/** Label and value on one line, the slider tucked under it. */
+/**
+ * One control, one value: the options joined in a single track rather than
+ * scattered as separate pills, so they read as a choice between them.
+ */
+@Composable
+private fun <T> Segmented(
+    tag: String,
+    options: List<Pair<String, T>>,
+    selected: T,
+    onSelect: (T) -> Unit,
+) {
+    Row(
+        Modifier
+            .clip(RoundedCornerShape(7.dp))
+            .background(Palette.panel2)
+            .padding(2.dp),
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        options.forEach { (label, value) ->
+            val on = value == selected
+            Text(
+                label,
+                color = if (on) Palette.accent else Palette.textDim,
+                fontSize = 11.sp,
+                fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
+                modifier = Modifier
+                    .testTag("$tag:${label.lowercase()}")
+                    .clip(RoundedCornerShape(5.dp))
+                    .background(if (on) Palette.bookmark else Palette.panel2)
+                    .clickableNoRipple { onSelect(value) }
+                    .padding(horizontal = 11.dp, vertical = 5.dp),
+            )
+        }
+    }
+}
+
+/** Label, slider and value on one line, so a setting costs one row not two. */
 @Composable
 private fun Setting(
     label: String,
@@ -534,23 +579,26 @@ private fun Setting(
     tag: String,
     onChange: (Float) -> Unit,
 ) {
-    Column(Modifier.fillMaxWidth()) {
-        Row(Modifier.fillMaxWidth()) {
-            Text(label, color = Palette.textDim, fontSize = 11.5.sp,
-                 modifier = Modifier.weight(1f))
-            Text(value, color = Palette.text, fontSize = 11.5.sp,
-                 fontFamily = FontFamily.Monospace)
-        }
+    Row(
+        Modifier.fillMaxWidth().height(26.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, color = Palette.textDim, fontSize = 11.sp,
+             modifier = Modifier.width(84.dp))
         Slider(
             value = current,
             onValueChange = onChange,
             valueRange = range,
-            modifier = Modifier.fillMaxWidth().height(22.dp).testTag("slider:$tag"),
+            modifier = Modifier.weight(1f).height(18.dp).testTag("slider:$tag"),
             colors = SliderDefaults.colors(
                 thumbColor = Palette.accent,
                 activeTrackColor = Palette.accent,
                 inactiveTrackColor = Palette.panel2,
             ),
         )
+        Text(value, color = Palette.text, fontSize = 11.sp,
+             fontFamily = FontFamily.Monospace,
+             textAlign = TextAlign.End,
+             modifier = Modifier.width(44.dp).padding(start = 8.dp))
     }
 }

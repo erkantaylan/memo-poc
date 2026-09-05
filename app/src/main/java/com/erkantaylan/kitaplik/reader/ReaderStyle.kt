@@ -28,6 +28,7 @@ data class ReaderStyle(
     val wordSpacing: Float = 0f,
     /** Side margin in dp — the phone's version of column width. */
     val margin: Float = 22f,
+    val align: TextAlignment = TextAlignment.LEFT,
 ) {
     companion object {
         val DEFAULT = ReaderStyle()
@@ -40,6 +41,15 @@ data class ReaderStyle(
 }
 
 enum class ReaderFont(val label: String) { SERIF("Serif"), SANS("Sans"), MONO("Mono") }
+
+/**
+ * Ragged right, or flush to both margins.
+ *
+ * Justified text is easier to track back to on a narrow measure, at the cost
+ * of uneven word gaps — which is exactly what the word-spacing control is for
+ * when they get bad.
+ */
+enum class TextAlignment(val label: String) { LEFT("Ragged"), JUSTIFY("Justified") }
 
 /**
  * How you like to read, remembered across books and sessions. These are
@@ -72,6 +82,9 @@ class ReaderPreferences(context: Context) {
             letterSpacing = prefs.getFloat(KEY_LETTER, ReaderStyle.DEFAULT.letterSpacing),
             wordSpacing = prefs.getFloat(KEY_WORD, ReaderStyle.DEFAULT.wordSpacing),
             margin = prefs.getFloat(KEY_MARGIN, ReaderStyle.DEFAULT.margin),
+            align = runCatching {
+                TextAlignment.valueOf(prefs.getString(KEY_ALIGN, null) ?: "")
+            }.getOrDefault(TextAlignment.LEFT),
         )
         set(value) = prefs.edit {
             putString(KEY_FONT, value.font.name)
@@ -80,6 +93,7 @@ class ReaderPreferences(context: Context) {
             putFloat(KEY_LETTER, value.letterSpacing)
             putFloat(KEY_WORD, value.wordSpacing)
             putFloat(KEY_MARGIN, value.margin)
+            putString(KEY_ALIGN, value.align.name)
         }
 
     private companion object {
@@ -91,5 +105,6 @@ class ReaderPreferences(context: Context) {
         const val KEY_LETTER = "letter_spacing"
         const val KEY_WORD = "word_spacing"
         const val KEY_MARGIN = "margin"
+        const val KEY_ALIGN = "align"
     }
 }
