@@ -82,6 +82,9 @@ class CatalogViewModel(
 
     fun onQueryChange(query: String) = _state.update { it.copy(query = query) }
 
+    /** Back with a search or a filter showing clears them before leaving the tab. */
+    fun clearFilters() = _state.update { it.copy(query = "", formatFilter = null) }
+
     /** Tapping the active format clears the filter. */
     fun onFormatFilterToggle(format: String) = _state.update {
         it.copy(formatFilter = if (it.formatFilter == format) null else format)

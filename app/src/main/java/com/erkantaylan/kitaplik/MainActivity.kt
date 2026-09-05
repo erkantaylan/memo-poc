@@ -2,6 +2,7 @@ package com.erkantaylan.kitaplik
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.getValue
@@ -101,6 +102,16 @@ class MainActivity : ComponentActivity() {
 
                     val open: (LibraryItem) -> Unit = { reading = it to null }
                     val current = reading
+
+                    // The back stack, such as it is: reading goes back to the
+                    // tab you came from, any tab goes back to Home, and only
+                    // Home hands back to the system and leaves the app. Screens
+                    // with dismissable state of their own — the catalog's search
+                    // and filter — register their own handler further down the
+                    // tree, which takes precedence over this one.
+                    BackHandler(enabled = current != null || tab != Tab.HOME) {
+                        if (current != null) reading = null else tab = Tab.HOME
+                    }
 
                     if (current != null) {
                         val (item, offset) = current

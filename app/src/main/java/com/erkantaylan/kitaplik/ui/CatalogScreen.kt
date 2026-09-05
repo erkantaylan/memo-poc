@@ -1,5 +1,6 @@
 package com.erkantaylan.kitaplik.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -72,6 +73,12 @@ fun CatalogScreen(
                 state.downloadStateOf(it) is DownloadState.Done }) }
             .filter { it.items.isNotEmpty() }
     }
+    // Nested below the shell's handler, so it runs first: back undoes the
+    // search or the filter before it walks the tabs back.
+    BackHandler(enabled = state.query.isNotEmpty() || state.formatFilter != null) {
+        viewModel.clearFilters()
+    }
+
     val shown = sections.sumOf { it.items.size }
     val shownBytes = sections.sumOf { s -> s.items.sumOf { it.bytes } }
 
