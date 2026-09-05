@@ -30,7 +30,9 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: '.'
+          # The memoriser moved under legacy/ when this repo absorbed the
+          # reader; the site it serves did not change.
+          path: './legacy'
 
       - name: Deploy to GitHub Pages
         id: deployment

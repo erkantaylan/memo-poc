@@ -5,6 +5,13 @@ runtime. Fetches a catalog describing every book in the library, downloads what
 you want to read, and reads EPUB and markdown in the app; PDFs go out to
 whatever reader you already use.
 
+This repository holds two things. **Kitaplık**, at the root, is the reader: a
+Kotlin/Compose Android app that reads a library out of Google Drive. **legacy/**
+is the memoriser that came before it — a web app for learning passages by heart,
+still live at <https://erkantaylan.github.io/memo-poc/>, kept because ideas are
+still being taken from it (bionic reading arrived that way; RSVP has not yet).
+It will be deleted when there is nothing left worth porting.
+
 Architecture and the reasoning behind it: **[docs/architecture.md](docs/architecture.md)**.
 Drive setup: **[docs/drive-setup.md](docs/drive-setup.md)**.
 
