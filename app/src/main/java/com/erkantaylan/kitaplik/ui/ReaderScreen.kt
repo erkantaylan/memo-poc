@@ -35,6 +35,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
@@ -81,6 +85,16 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
     var returnTo by androidx.compose.runtime.remember {
         androidx.compose.runtime.mutableStateOf<Int?>(null)
     }
+    // A selection in progress, hoisted out of any one paragraph because it is
+    // allowed to cross them.
+    var selection by androidx.compose.runtime.remember {
+        androidx.compose.runtime.mutableStateOf<Span?>(null)
+    }
+    // Where each visible paragraph sits and how its text is laid out. A plain
+    // map, not state: it is written during layout and read only from gesture
+    // callbacks, so making it observable would buy nothing and cost a
+    // recomposition every time the list moves.
+    val placed = androidx.compose.runtime.remember { mutableMapOf<Int, Placed>() }
     val context = LocalContext.current
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
 
@@ -275,15 +289,26 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 items(state.book.paragraphs, key = { it.index }) { paragraph ->
-                    val marks = state.bookmarks.filter { it.paragraphIndex == paragraph.index }
+                    // A mark is drawn wherever it overlaps, not only in the
+                    // paragraph it began in, so a passage crossing a break
+                    // highlights on both sides of it.
+                    // The list recycles what scrolls away; its geometry has to
+                    // go with it, or a stale rectangle from three screens ago
+                    // becomes the "nearest" paragraph to a finger at the edge.
+                    androidx.compose.runtime.DisposableEffect(paragraph.index) {
+                        onDispose { placed.remove(paragraph.index) }
+                    }
+
+                    val paraEnd = paragraph.start + paragraph.text.length
+                    val marks = state.bookmarks.filter {
+                        it.charOffset < paraEnd &&
+                            paragraph.start < it.charOffset + maxOf(it.wordLength, 1)
+                    }
 
                     // Highlight each marked word rather than the whole block.
-                    // Live selection while the finger is down. Null the rest of
-                    // the time, so it costs nothing to the paragraphs you are
-                    // only reading.
-                    var dragging by androidx.compose.runtime.remember(paragraph.index) {
-                        androidx.compose.runtime.mutableStateOf<IntRange?>(null)
-                    }
+                    // This paragraph's share of a selection in progress, or
+                    // null — which is every paragraph you are only reading.
+                    val dragging = selection?.sliceFor(paragraph.index, paragraph.text.length)
                     val wordSpacing = state.style.wordSpacing
                     val hits = state.matches.filter { it.paragraph == paragraph.index }
                     val here = state.matches.getOrNull(state.matchIndex)
@@ -333,8 +358,12 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                                 marks.forEach { mark ->
                                     val from = (mark.charOffset - paragraph.start)
                                         .coerceIn(0, paragraph.text.length)
-                                    val to = (from + maxOf(mark.wordLength, 1))
-                                        .coerceIn(from, paragraph.text.length)
+                                    // Measured from the mark's own start, not
+                                    // from the clamped one, or a passage that
+                                    // began in an earlier paragraph would be
+                                    // drawn its full length again here.
+                                    val to = (mark.charOffset + maxOf(mark.wordLength, 1) -
+                                        paragraph.start).coerceIn(from, paragraph.text.length)
                                     addStyle(
                                         androidx.compose.ui.text.SpanStyle(
                                             background = Palette.bookmark,
@@ -395,9 +424,18 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                             ReaderFont.SANS -> FontFamily.SansSerif
                             ReaderFont.MONO -> FontFamily.Monospace
                         },
-                        onTextLayout = { layout = it },
+                        onTextLayout = {
+                            layout = it
+                            placed[paragraph.index] =
+                                (placed[paragraph.index] ?: Placed()).copy(layout = it)
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
+                            .onGloballyPositioned { coords ->
+                                placed[paragraph.index] =
+                                    (placed[paragraph.index] ?: Placed())
+                                        .copy(bounds = coords.boundsInRoot())
+                            }
                             // Keyed on the paragraph alone, never on the
                             // layout: selecting redraws the text, which hands
                             // back a fresh TextLayoutResult, which would
@@ -406,41 +444,53 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                             .pointerInput(paragraph.index) {
                                 // Press and lift marks the word under the
                                 // finger; press and drag marks everything the
-                                // finger crosses. One gesture, because holding
-                                // still is just a drag of length zero.
+                                // finger crosses, across paragraph breaks and
+                                // all. One gesture, because holding still is
+                                // just a drag of length zero.
                                 var anchor = 0
                                 detectDragGesturesAfterLongPress(
                                     onDragStart = { position ->
                                         val result = layoutRef.value
                                             ?: return@detectDragGesturesAfterLongPress
                                         anchor = result.getOffsetForPosition(position)
-                                        dragging = anchor..anchor
+                                        selection = Span(
+                                            paragraph.index, anchor, paragraph.index, anchor)
                                     },
                                     onDrag = { change, _ ->
-                                        val result = layoutRef.value
+                                        // Compose keeps delivering to the node
+                                        // that took the press, so once the
+                                        // finger leaves this paragraph the
+                                        // position is simply out of its bounds.
+                                        // Lift it into root space and ask which
+                                        // paragraph is actually under there.
+                                        val mine = placed[paragraph.index]?.bounds
                                             ?: return@detectDragGesturesAfterLongPress
-                                        val at = result.getOffsetForPosition(change.position)
-                                        dragging = minOf(anchor, at)..maxOf(anchor, at)
+                                        val root = mine.topLeft + change.position
+                                        val at = offsetAt(placed, root)
+                                            ?: return@detectDragGesturesAfterLongPress
+                                        selection = Span(
+                                            paragraph.index, anchor, at.first, at.second)
                                     },
                                     // Lifting without moving arrives here, not
                                     // at onDragEnd — so a plain long press is
                                     // a cancelled drag of length zero, and
                                     // still means "mark this word".
                                     onDragCancel = {
-                                        val span = dragging
-                                        dragging = null
-                                        if (span != null && span.first == span.last) {
+                                        val span = selection
+                                        selection = null
+                                        if (span != null && span.isPoint) {
                                             say(context, viewModel.toggleBookmarkAt(
                                                 paragraph.index, anchor))
                                         }
                                     },
                                     onDragEnd = {
-                                        val span = dragging
-                                        dragging = null
-                                        say(context, if (span == null || span.first == span.last)
+                                        val span = selection
+                                        selection = null
+                                        say(context, if (span == null || span.isPoint)
                                             viewModel.toggleBookmarkAt(paragraph.index, anchor)
-                                        else viewModel.bookmarkRange(
-                                            paragraph.index, span.first, span.last + 1))
+                                        else viewModel.bookmarkSpan(
+                                            span.fromParagraph, span.fromOffset,
+                                            span.toParagraph, span.toOffset + 1))
                                     },
                                 )
                             }
@@ -828,4 +878,78 @@ private fun say(context: android.content.Context, what: BookmarkToggle) {
         },
         Toast.LENGTH_SHORT,
     ).show()
+}
+
+/**
+ * Where a paragraph sits on screen, and how its text is laid out inside it.
+ *
+ * The two halves arrive from different callbacks in no fixed order, so both are
+ * optional until they are not, and an entry is only usable once it has both.
+ */
+private data class Placed(
+    val bounds: Rect? = null,
+    val layout: androidx.compose.ui.text.TextLayoutResult? = null,
+) {
+    val usable: Boolean get() = layout != null && bounds != null && bounds.height > 0f
+}
+
+/**
+ * A selection in progress: from a character in one paragraph to a character in
+ * another. Held in reading order or reversed — the finger may go either way,
+ * and normalising is left to the moment it matters.
+ */
+private data class Span(
+    val fromParagraph: Int,
+    val fromOffset: Int,
+    val toParagraph: Int,
+    val toOffset: Int,
+) {
+    val isPoint: Boolean get() = fromParagraph == toParagraph && fromOffset == toOffset
+
+    /**
+     * What of this selection falls inside one paragraph: the whole of it for a
+     * paragraph in the middle, a part of it at either end, nothing outside.
+     */
+    fun sliceFor(paragraph: Int, length: Int): IntRange? {
+        val forward = fromParagraph < toParagraph ||
+            (fromParagraph == toParagraph && fromOffset <= toOffset)
+        val head = if (forward) fromParagraph else toParagraph
+        val tail = if (forward) toParagraph else fromParagraph
+        if (paragraph !in head..tail) return null
+
+        val start = if (paragraph == head) (if (forward) fromOffset else toOffset) else 0
+        val end = if (paragraph == tail) (if (forward) toOffset else fromOffset) else length
+        val lo = start.coerceIn(0, length)
+        val hi = end.coerceIn(lo, length)
+        return lo..hi
+    }
+}
+
+/**
+ * Which paragraph is under a point in root space, and where in its text.
+ *
+ * Only visible paragraphs are in the map — the list recycles the rest — so a
+ * finger dragged past the top or bottom edge snaps to the nearest one that is
+ * on screen rather than to nothing.
+ */
+private fun offsetAt(placed: Map<Int, Placed>, point: Offset): Pair<Int, Int>? {
+    if (placed.isEmpty()) return null
+
+    val usable = placed.entries.filter { it.value.usable }
+    if (usable.isEmpty()) return null
+
+    val direct = usable.firstOrNull { (_, p) ->
+        point.y >= p.bounds!!.top && point.y <= p.bounds.bottom
+    }
+    // Past the top or bottom edge: the nearest paragraph still on screen, so
+    // dragging off the end selects to the end rather than to nothing.
+    val entry = direct ?: usable.minByOrNull { (_, p) ->
+        minOf(
+            kotlin.math.abs(point.y - p.bounds!!.top),
+            kotlin.math.abs(point.y - p.bounds.bottom),
+        )
+    } ?: return null
+
+    val local = point - entry.value.bounds!!.topLeft
+    return entry.key to entry.value.layout!!.getOffsetForPosition(local)
 }

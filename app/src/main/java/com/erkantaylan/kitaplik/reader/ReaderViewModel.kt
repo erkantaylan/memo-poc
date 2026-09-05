@@ -232,35 +232,61 @@ class ReaderViewModel(
     }
 
     /**
-     * Bookmark a run of text the finger dragged over, snapped out to whole
-     * words at both ends — half of "Komatsu" is not a thing you meant to keep.
+     * Bookmark a passage the finger dragged over, snapped out to whole words at
+     * both ends — half of "Komatsu" is not a thing you meant to keep.
+     *
+     * The passage may cross paragraph breaks. It is stored the way every other
+     * position in this app is stored, as a character offset and a length into
+     * the whole book, so a mark spanning three paragraphs needs no more
+     * machinery than one sitting inside a single word.
      */
-    fun bookmarkRange(paragraphIndex: Int, from: Int, to: Int): BookmarkToggle {
-        val para = _state.value.book.paragraphs.getOrNull(paragraphIndex)
-            ?: return BookmarkToggle.NO_WORD
-        val lo = minOf(from, to)
-        val hi = maxOf(from, to)
-        val start = wordBoundsAt(para.text, lo)?.first ?: return BookmarkToggle.NO_WORD
-        val end = wordBoundsAt(para.text, (hi - 1).coerceAtLeast(lo))?.second
-            ?: return BookmarkToggle.NO_WORD
-        if (end <= start) return BookmarkToggle.NO_WORD
+    fun bookmarkSpan(
+        fromParagraph: Int, fromOffset: Int,
+        toParagraph: Int, toOffset: Int,
+    ): BookmarkToggle {
+        val book = _state.value.book
+        val forward = fromParagraph < toParagraph ||
+            (fromParagraph == toParagraph && fromOffset <= toOffset)
+        val headIndex = if (forward) fromParagraph else toParagraph
+        val tailIndex = if (forward) toParagraph else fromParagraph
+        val headAt = if (forward) fromOffset else toOffset
+        val tailAt = if (forward) toOffset else fromOffset
 
-        val text = para.text.substring(start, end)
+        val head = book.paragraphs.getOrNull(headIndex) ?: return BookmarkToggle.NO_WORD
+        val tail = book.paragraphs.getOrNull(tailIndex) ?: return BookmarkToggle.NO_WORD
+
+        val start = wordBoundsAt(head.text, headAt)?.first ?: return BookmarkToggle.NO_WORD
+        val endLocal = wordBoundsAt(tail.text, (tailAt - 1).coerceAtLeast(0))?.second
+            ?: return BookmarkToggle.NO_WORD
+
+        val globalStart = head.start + start
+        val globalEnd = tail.start + endLocal
+        if (globalEnd <= globalStart) return BookmarkToggle.NO_WORD
+
+        // The label reads across the break as one line, because that is how you
+        // read it; the mark itself keeps the paragraphs apart.
+        val text = book.paragraphs
+            .filter { it.index in headIndex..tailIndex }
+            .joinToString(" ") { para ->
+                val a = (globalStart - para.start).coerceIn(0, para.text.length)
+                val b = (globalEnd - para.start).coerceIn(a, para.text.length)
+                para.text.substring(a, b)
+            }
+            .trim()
+
         val added = bookmarks.toggle(
             Bookmark(
                 id = newBookmarkId(),
                 itemId = item.id,
                 bookTitle = item.title,
                 author = item.author,
-                charOffset = para.start + start,
-                paragraphIndex = paragraphIndex,
-                wordLength = end - start,
-                // The label is what you see in a list, so a long passage is cut
-                // short there while the mark itself keeps its full length.
+                charOffset = globalStart,
+                paragraphIndex = headIndex,
+                wordLength = globalEnd - globalStart,
                 word = if (text.length <= LABEL_CHARS) text
                        else text.take(LABEL_CHARS).trimEnd() + "\u2026",
-                preview = para.text
-                    .substring(maxOf(0, start - 40), minOf(para.text.length, end + 80))
+                preview = head.text
+                    .substring(maxOf(0, start - 40), minOf(head.text.length, start + 160))
                     .replace(Regex("\\s+"), " ")
                     .trim(),
                 createdAt = System.currentTimeMillis(),
