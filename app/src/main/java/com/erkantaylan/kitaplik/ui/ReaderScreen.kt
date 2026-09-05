@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -76,6 +77,8 @@ import com.erkantaylan.kitaplik.ui.theme.Palette
 import android.widget.Toast
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.launch
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 
 /**
  * Plain reading. Paragraphs in a lazy list, position remembered as you scroll.
@@ -89,6 +92,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
     var returnTo by androidx.compose.runtime.remember {
         androidx.compose.runtime.mutableStateOf<Int?>(null)
     }
@@ -306,7 +310,11 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                 state = listState,
                 modifier = Modifier.fillMaxSize().testTag("reader_text"),
                 contentPadding = PaddingValues(
-                    horizontal = state.style.margin.dp, vertical = 24.dp),
+                    start = state.style.margin.dp,
+                    // The rail lives in the right margin, so the text stops
+                    // short of it rather than running underneath.
+                    end = state.style.margin.dp + RAIL,
+                    top = 24.dp, bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 items(state.book.paragraphs, key = { it.index }) { paragraph ->
@@ -498,6 +506,21 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                     )
                 }
             }
+
+            BookmarkRail(
+                book = state.book,
+                marks = state.bookmarks,
+                here = progress,
+                onSeek = { fraction ->
+                    val at = (fraction * state.book.charCount).toInt()
+                    scope.launch { listState.scrollToItem(state.book.paragraphAt(at)) }
+                },
+                onJump = { mark ->
+                    viewModel.beginExcursion()
+                    scope.launch { listState.scrollToItem(mark.paragraphIndex) }
+                },
+                modifier = Modifier.align(Alignment.CenterEnd),
+            )
 
             // The two ends, drawn over the page. A handle whose paragraph has
             // scrolled away is simply not drawn — the selection is still there,
@@ -1151,5 +1174,100 @@ private fun SelectionBar(
                 .clickableNoRipple(onSave)
                 .padding(horizontal = 18.dp, vertical = 8.dp),
         )
+    }
+}
+
+/** Width of the rail, and how much of it is the tick rather than the track. */
+private val RAIL = 18.dp
+private val TICK = 11.dp
+
+/**
+ * A scrollbar that shows what you have marked.
+ *
+ * The trick an IDE gutter plays is that the bar is not only a control, it is a
+ * map: the marks sit where they actually are in the whole, so you can see the
+ * shape of your own attention without moving. Here that costs nothing to
+ * compute — a bookmark already knows its character offset and the book knows
+ * its length, so a tick's position is one division. No text is drawn.
+ *
+ * Drag it to travel. Tap a tick to visit that mark, which opens an excursion,
+ * because looking at a bookmark is not reading and should not move your place.
+ */
+@Composable
+private fun BookmarkRail(
+    book: com.erkantaylan.kitaplik.text.BookText,
+    marks: List<com.erkantaylan.kitaplik.reader.Bookmark>,
+    here: Float,
+    onSeek: (Float) -> Unit,
+    onJump: (com.erkantaylan.kitaplik.reader.Bookmark) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (book.charCount <= 0) return
+    val density = LocalDensity.current
+    var height by androidx.compose.runtime.remember {
+        androidx.compose.runtime.mutableStateOf(1f)
+    }
+
+    // Where each mark sits, 0..1 down the book.
+    val ticks = androidx.compose.runtime.remember(marks, book.charCount) {
+        marks.map { it to (it.charOffset.toFloat() / book.charCount).coerceIn(0f, 1f) }
+    }
+
+    Box(
+        modifier
+            .fillMaxHeight()
+            .width(RAIL)
+            .testTag("rail")
+            .onGloballyPositioned { height = it.size.height.toFloat().coerceAtLeast(1f) }
+            .pointerInput(ticks, height) {
+                val slop = with(density) { 14.dp.toPx() }
+                detectTapGestures { at ->
+                    // A tap near a mark means that mark; anywhere else on the
+                    // rail means take me to that part of the book.
+                    val hit = ticks.minByOrNull {
+                        kotlin.math.abs(it.second * height - at.y)
+                    }?.takeIf { kotlin.math.abs(it.second * height - at.y) <= slop }
+                    if (hit != null) onJump(hit.first) else onSeek(at.y / height)
+                }
+            }
+            .pointerInput(height) {
+                detectVerticalDragGestures { change, _ ->
+                    change.consume()
+                    onSeek(change.position.y / height)
+                }
+            },
+    ) {
+        androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+            val tickW = with(density) { TICK.toPx() }
+            val left = (size.width - tickW) / 2f
+
+            // A quiet strip rather than a hairline: it has to be findable
+            // without being something you look at while reading.
+            drawRect(
+                color = Palette.panel,
+                topLeft = Offset(left, 0f),
+                size = androidx.compose.ui.geometry.Size(tickW, size.height),
+            )
+
+            val tickH = with(density) { 4.dp.toPx() }
+            ticks.forEach { (mark, at) ->
+                drawRect(
+                    color = Palette.highlight(mark.color),
+                    topLeft = Offset(left, at * size.height - tickH / 2f),
+                    size = androidx.compose.ui.geometry.Size(tickW, tickH),
+                )
+            }
+
+            // Where you are, drawn last and wider than the marks, so it is
+            // never lost under one.
+            val thumbH = with(density) { 3.dp.toPx() }
+            drawRect(
+                color = Palette.accent,
+                topLeft = Offset(left - with(density) { 3.dp.toPx() },
+                                 here * size.height - thumbH / 2f),
+                size = androidx.compose.ui.geometry.Size(
+                    tickW + with(density) { 6.dp.toPx() }, thumbH),
+            )
+        }
     }
 }
