@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "Memo",
+    "slug": "memo",
+    "version": "0.3.0",
+    "orientation": "portrait",
+    "scheme": "memo",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": false,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.erkantaylan.memo"
+    },
+    "android": {
+      "package": "com.erkantaylan.memo",
+      "adaptiveIcon": {
+        "backgroundColor": "#1c1a16"
+      },
+      "edgeToEdgeEnabled": true
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static"
+    },
+    "plugins": [
+      "expo-router"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "ec7d47fa-8e81-4842-ac12-a4690da13447"
+      }
+    },
+    "owner": "etaylan13"
+  }
+}

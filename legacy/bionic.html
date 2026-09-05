@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<title>Bionic reading — Memorize</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  #text {
+    white-space: pre-wrap;
+    margin: 1rem auto 3rem;
+  }
+  #text b { color: var(--fg); font-weight: 700; }
+  #text .rest { color: var(--muted); font-weight: 400; }
+  #text .punct { color: var(--muted); }
+  .stanza-break { display: block; height: 0.7rem; }
+  .hint {
+    color: var(--muted);
+    font-size: 0.85rem;
+    margin: 0 auto 1rem;
+    max-width: 900px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <a class="home" href="index.html">← Home</a>
+  <span class="text-title" id="textTitle"></span>
+  <span class="pager" id="pager" hidden>
+    <button id="prevPage" class="secondary">◄</button>
+    <span class="page-info" id="pageInfo"></span>
+    <button id="nextPage" class="secondary">►</button>
+  </span>
+  <span class="stats" id="stats"></span>
+</header>
+
+<div id="text"></div>
+
+<div class="hint">
+  Brain auto-completes the bolded prefix. Tune Bold % to your reading skill — higher means more help.
+</div>
+
+<script src="samples.js"></script>
+<script src="data.js"></script>
+<script src="reader.js"></script>
+<script>
+const activeText = getActiveText();
+document.getElementById('textTitle').textContent = activeText.title;
+document.title = activeText.title + ' — Bionic';
+
+const textEl = document.getElementById('text');
+const stats  = document.getElementById('stats');
+
+let cachedBody = activeText.body;
+let bodyLines = cachedBody.split('\n');
+let pages = paginate(bodyLines, 800);
+let currentPage = 0;
+const pagerEl = document.getElementById('pager');
+const pageInfoEl = document.getElementById('pageInfo');
+
+function updatePager() {
+  const paginated = pages.length > 1;
+  pagerEl.hidden = !paginated;
+  if (paginated) pageInfoEl.textContent = `Page ${currentPage + 1} / ${pages.length}`;
+}
+
+const LETTER = /\p{L}/u;
+
+function splitToken(tok) {
+  const chars = [...tok];
+  let i = 0, j = chars.length - 1;
+  while (i < chars.length && !LETTER.test(chars[i])) i++;
+  while (j >= i && !LETTER.test(chars[j])) j--;
+  if (i > j) return { lead: tok, core: '', trail: '' };
+  return {
+    lead:  chars.slice(0, i).join(''),
+    core:  chars.slice(i, j + 1).join(''),
+    trail: chars.slice(j + 1).join(''),
+  };
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+}
+
+function bionicWord(tok, pct) {
+  const { lead, core, trail } = splitToken(tok);
+  if (!core) return escapeHtml(tok);
+  const coreChars = [...core];
+  const boldLen = Math.max(1, Math.ceil(coreChars.length * pct / 100));
+  const bold = coreChars.slice(0, boldLen).join('');
+  const rest = coreChars.slice(boldLen).join('');
+  return (
+    `<span class="punct">${escapeHtml(lead)}</span>` +
+    `<b>${escapeHtml(bold)}</b>` +
+    `<span class="rest">${escapeHtml(rest)}</span>` +
+    `<span class="punct">${escapeHtml(trail)}</span>`
+  );
+}
+
+function render() {
+  const pct = getPref('boldPct', 50);
+  let wordCount = 0, totalWords = 0;
+  const page = pages[currentPage];
+  const html = bodyLines.map((line, i) => {
+    const inPage = i >= page.start && i <= page.end;
+    const lineWords = (line.match(/\p{L}+/gu) || []).length;
+    totalWords += lineWords;
+    if (!inPage) return '';
+    if (line.trim() === '') return '<div class="stanza-break"></div>';
+    const parts = line.split(/(\s+)/);
+    const inner = parts.map(p => {
+      if (/^\s+$/.test(p)) return escapeHtml(p);
+      if (!LETTER.test(p)) return `<span class="punct">${escapeHtml(p)}</span>`;
+      wordCount++;
+      return bionicWord(p, pct);
+    }).join('');
+    return `<div class="line">${inner}</div>`;
+  }).join('');
+  textEl.innerHTML = html;
+  stats.textContent = pages.length > 1
+    ? `${wordCount} of ${totalWords} words (page)`
+    : `${totalWords} words`;
+  window.scrollTo(0, 0);
+}
+
+installReaderOptions({
+  textEl,
+  include: ['font', 'theme', 'size', 'boldPct', 'lh', 'ls', 'ws', 'width', 'stripMd'],
+  openByDefault: true,
+  onChange: () => render(),
+});
+
+document.getElementById('prevPage').addEventListener('click', () => {
+  if (currentPage > 0) { currentPage--; updatePager(); render(); }
+});
+document.getElementById('nextPage').addEventListener('click', () => {
+  if (currentPage < pages.length - 1) { currentPage++; updatePager(); render(); }
+});
+window.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  if (pages.length <= 1) return;
+  if (e.key === 'ArrowLeft' && currentPage > 0) { currentPage--; updatePager(); render(); }
+  else if (e.key === 'ArrowRight' && currentPage < pages.length - 1) { currentPage++; updatePager(); render(); }
+});
+
+updatePager();
+render();
+</script>
+</body>
+</html>
