@@ -1,7 +1,5 @@
 package com.erkantaylan.kitaplik.reader
 
-import android.content.Context
-import androidx.core.content.edit
 
 /**
  * Bionic reading: the front of each word carries more weight, giving the eye a
@@ -56,28 +54,4 @@ private fun isWordPart(text: String, i: Int): Boolean {
     if (c != '\'' && c != '’') return false
     return i > 0 && text[i - 1].isLetterOrDigit() &&
         i + 1 < text.length && text[i + 1].isLetterOrDigit()
-}
-
-/**
- * How you like to read, remembered across books and sessions. These are
- * preferences about your eyes, not about any one book, so they are global.
- */
-class ReaderPreferences(context: Context) {
-
-    private val prefs = context.getSharedPreferences("reader", Context.MODE_PRIVATE)
-
-    var bionic: Boolean
-        get() = prefs.getBoolean(KEY_BIONIC, false)
-        set(value) = prefs.edit { putBoolean(KEY_BIONIC, value) }
-
-    var strength: BionicStrength
-        get() = runCatching {
-            BionicStrength.valueOf(prefs.getString(KEY_STRENGTH, null) ?: "")
-        }.getOrDefault(BionicStrength.MEDIUM)
-        set(value) = prefs.edit { putString(KEY_STRENGTH, value.name) }
-
-    private companion object {
-        const val KEY_BIONIC = "bionic"
-        const val KEY_STRENGTH = "bionic_strength"
-    }
 }

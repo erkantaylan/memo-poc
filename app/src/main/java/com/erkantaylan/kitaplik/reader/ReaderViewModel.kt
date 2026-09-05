@@ -26,7 +26,6 @@ data class ReaderUiState(
     val startParagraph: Int = 0,
     /** How far into that paragraph the saved position sat, 0..1. */
     val startFraction: Float = 0f,
-    val fontScale: Float = 1f,
     /** Measured words per minute, 0 while there is not enough evidence. */
     val wpm: Int = 0,
     /** True while that figure is an early estimate rather than settled. */
@@ -35,6 +34,7 @@ data class ReaderUiState(
     val minutesLeft: Long? = null,
     val bionic: Boolean = false,
     val bionicStrength: BionicStrength = BionicStrength.MEDIUM,
+    val style: ReaderStyle = ReaderStyle.DEFAULT,
     /** The reading panel: bionic, strength and text size, over the text. */
     val showPanel: Boolean = false,
     val markedParagraphs: Set<Int> = emptySet(),
@@ -54,7 +54,11 @@ class ReaderViewModel(
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(
-        ReaderUiState(bionic = preferences.bionic, bionicStrength = preferences.strength)
+        ReaderUiState(
+            bionic = preferences.bionic,
+            bionicStrength = preferences.strength,
+            style = preferences.style,
+        )
     )
     val state: StateFlow<ReaderUiState> = _state.asStateFlow()
 
@@ -286,7 +290,11 @@ class ReaderViewModel(
         _state.update { it.copy(bionicStrength = strength) }
     }
 
-    fun adjustFont(delta: Float) {
-        _state.update { it.copy(fontScale = (it.fontScale + delta).coerceIn(0.8f, 2.0f)) }
+    /** Every control writes the whole blob, the way the memoriser did. */
+    fun setStyle(style: ReaderStyle) {
+        preferences.style = style
+        _state.update { it.copy(style = style) }
     }
+
+    fun resetStyle() = setStyle(ReaderStyle.DEFAULT)
 }

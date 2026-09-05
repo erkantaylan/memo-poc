@@ -40,9 +40,17 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.heightIn
 import com.erkantaylan.kitaplik.reader.BionicStrength
+import com.erkantaylan.kitaplik.reader.ReaderFont
+import com.erkantaylan.kitaplik.reader.ReaderStyle
 import com.erkantaylan.kitaplik.reader.BookmarkToggle
 import com.erkantaylan.kitaplik.reader.bionicSpans
 import com.erkantaylan.kitaplik.reader.ReaderViewModel
@@ -161,10 +169,11 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
             ReadingPanel(
                 bionic = state.bionic,
                 strength = state.bionicStrength,
+                style = state.style,
                 onBionic = viewModel::setBionic,
                 onStrength = viewModel::setBionicStrength,
-                onSmaller = { viewModel.adjustFont(-0.1f) },
-                onLarger = { viewModel.adjustFont(0.1f) },
+                onStyle = viewModel::setStyle,
+                onReset = viewModel::resetStyle,
             )
         }
 
@@ -197,17 +206,19 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
             else -> LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize().testTag("reader_text"),
-                contentPadding = PaddingValues(horizontal = 22.dp, vertical = 24.dp),
+                contentPadding = PaddingValues(
+                    horizontal = state.style.margin.dp, vertical = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 items(state.book.paragraphs, key = { it.index }) { paragraph ->
                     val marks = state.bookmarks.filter { it.paragraphIndex == paragraph.index }
 
                     // Highlight each marked word rather than the whole block.
+                    val wordSpacing = state.style.wordSpacing
                     val rendered = androidx.compose.runtime.remember(
-                        paragraph.text, marks, state.bionic, state.bionicStrength,
+                        paragraph.text, marks, state.bionic, state.bionicStrength, wordSpacing,
                     ) {
-                        if (marks.isEmpty() && !state.bionic) {
+                        if (marks.isEmpty() && !state.bionic && wordSpacing == 0f) {
                             androidx.compose.ui.text.AnnotatedString(paragraph.text)
                         } else {
                             androidx.compose.ui.text.buildAnnotatedString {
@@ -230,6 +241,20 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                                                 word.headEnd, word.end,
                                             )
                                         }
+                                }
+                                // Compose has no wordSpacing, so each space is
+                                // widened by a letterSpacing span. The string is
+                                // never rewritten — every position in this app is
+                                // a character offset into it.
+                                if (wordSpacing > 0f) {
+                                    paragraph.text.forEachIndexed { at, ch ->
+                                        if (ch == ' ') addStyle(
+                                            androidx.compose.ui.text.SpanStyle(
+                                                letterSpacing = wordSpacing.em,
+                                            ),
+                                            at, at + 1,
+                                        )
+                                    }
                                 }
                                 marks.forEach { mark ->
                                     val from = (mark.charOffset - paragraph.start)
@@ -256,9 +281,14 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                     Text(
                         rendered,
                         color = Palette.readerText,
-                        fontSize = (17 * state.fontScale).sp,
-                        lineHeight = (28 * state.fontScale).sp,
-                        fontFamily = FontFamily.Serif,
+                        fontSize = state.style.size.sp,
+                        lineHeight = (state.style.size * state.style.lineHeight).sp,
+                        letterSpacing = state.style.letterSpacing.em,
+                        fontFamily = when (state.style.font) {
+                            ReaderFont.SERIF -> FontFamily.Serif
+                            ReaderFont.SANS -> FontFamily.SansSerif
+                            ReaderFont.MONO -> FontFamily.Monospace
+                        },
                         onTextLayout = { layout = it },
                         modifier = Modifier
                             .fillMaxWidth()
@@ -361,102 +391,153 @@ private fun ReaderBar(
 
 
 /**
- * The reading panel: how the text is set, tuned while you are looking at it.
+ * The reading panel: how the page is set, tuned while you are looking at it.
  *
- * It sits under the bar rather than in a bottom sheet, so the prose stays on
- * screen — every control here changes the look of the page, and you want to see
- * that happen rather than dismiss a sheet to find out.
+ * It sits under the bar rather than in a sheet, and is capped at 60% of the
+ * height with its own scroll, so prose stays on screen underneath. Every
+ * control here changes the look of that prose, and watching it change is the
+ * whole point — a panel that covers the text makes you guess.
  */
 @Composable
 private fun ReadingPanel(
     bionic: Boolean,
     strength: BionicStrength,
+    style: ReaderStyle,
     onBionic: (Boolean) -> Unit,
     onStrength: (BionicStrength) -> Unit,
-    onSmaller: () -> Unit,
-    onLarger: () -> Unit,
+    onStyle: (ReaderStyle) -> Unit,
+    onReset: () -> Unit,
 ) {
+    val scroll = rememberScrollState()
     Column(
         Modifier
             .fillMaxWidth()
+            .heightIn(max = 460.dp)
             .background(Palette.panel)
+            .verticalScroll(scroll)
             .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Row(
-            Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("Bionic reading", color = Palette.text, fontSize = 13.5.sp)
-                Text(
-                    "Weight the front of each word",
-                    color = Palette.textDim,
-                    fontSize = 11.sp,
-                )
+                Text("Weight the front of each word",
+                     color = Palette.textDim, fontSize = 11.sp)
             }
-            Text(
-                if (bionic) "ON" else "OFF",
-                color = if (bionic) Palette.accent else Palette.textDim,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier
-                    .testTag("bionic_toggle")
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(if (bionic) Palette.bookmark else Palette.panel2)
-                    .clickableNoRipple { onBionic(!bionic) }
-                    .padding(horizontal = 14.dp, vertical = 7.dp),
-            )
+            Chip("bionic_toggle", if (bionic) "ON" else "OFF", bionic) { onBionic(!bionic) }
         }
 
-        // Strength only means anything while bionic is on, so it goes with it
+        // Strength only means anything while bionic is on, so it travels with it
         // rather than sitting live above an off switch.
         if (bionic) {
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text("Strength", color = Palette.textDim, fontSize = 12.sp,
-                     modifier = Modifier.weight(1f))
+            ChipRow("Strength") {
                 BionicStrength.entries.forEach { option ->
-                    val on = option == strength
-                    Text(
-                        option.label,
-                        color = if (on) Palette.accent else Palette.textDim,
-                        fontSize = 12.sp,
-                        modifier = Modifier
-                            .testTag("strength:${option.name.lowercase()}")
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(if (on) Palette.bookmark else Palette.panel2)
-                            .clickableNoRipple { onStrength(option) }
-                            .padding(horizontal = 11.dp, vertical = 6.dp),
-                    )
+                    Chip("strength:${option.name.lowercase()}", option.label,
+                         option == strength) { onStrength(option) }
                 }
             }
         }
 
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text("Text size", color = Palette.textDim, fontSize = 12.sp,
-                 modifier = Modifier.weight(1f))
-            Text("A−", color = Palette.text, fontSize = 15.sp,
-                 modifier = Modifier
-                     .testTag("font_smaller")
-                     .clip(RoundedCornerShape(6.dp))
-                     .background(Palette.panel2)
-                     .clickableNoRipple(onSmaller)
-                     .padding(horizontal = 14.dp, vertical = 5.dp))
-            Text("A+", color = Palette.text, fontSize = 15.sp,
-                 modifier = Modifier
-                     .testTag("font_larger")
-                     .clip(RoundedCornerShape(6.dp))
-                     .background(Palette.panel2)
-                     .clickableNoRipple(onLarger)
-                     .padding(horizontal = 14.dp, vertical = 5.dp))
+        Divider()
+
+        ChipRow("Font") {
+            ReaderFont.entries.forEach { font ->
+                Chip("font:${font.name.lowercase()}", font.label, font == style.font) {
+                    onStyle(style.copy(font = font))
+                }
+            }
         }
+
+        Setting("Size", "${style.size.toInt()}", style.size, ReaderStyle.SIZE, "size") {
+            onStyle(style.copy(size = it))
+        }
+        Setting("Line height", String.format("%.2f", style.lineHeight),
+                style.lineHeight, ReaderStyle.LINE_HEIGHT, "line_height") {
+            onStyle(style.copy(lineHeight = it))
+        }
+        Setting("Letter spacing", String.format("%.2f", style.letterSpacing),
+                style.letterSpacing, ReaderStyle.LETTER_SPACING, "letter_spacing") {
+            onStyle(style.copy(letterSpacing = it))
+        }
+        Setting("Word spacing", String.format("%.2f", style.wordSpacing),
+                style.wordSpacing, ReaderStyle.WORD_SPACING, "word_spacing") {
+            onStyle(style.copy(wordSpacing = it))
+        }
+        Setting("Margin", "${style.margin.toInt()}", style.margin, ReaderStyle.MARGIN, "margin") {
+            onStyle(style.copy(margin = it))
+        }
+
+        Text(
+            "Reset to defaults",
+            color = Palette.textDim,
+            fontSize = 12.sp,
+            modifier = Modifier
+                .testTag("reset_style")
+                .clickableNoRipple(onReset)
+                .padding(vertical = 6.dp),
+        )
+    }
+}
+
+@Composable
+private fun Divider() {
+    Box(Modifier.fillMaxWidth().height(1.dp).background(Palette.border))
+}
+
+@Composable
+private fun ChipRow(label: String, chips: @Composable () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, color = Palette.textDim, fontSize = 12.sp, modifier = Modifier.weight(1f))
+        chips()
+    }
+}
+
+@Composable
+private fun Chip(tag: String, label: String, active: Boolean, onClick: () -> Unit) {
+    Text(
+        label,
+        color = if (active) Palette.accent else Palette.textDim,
+        fontSize = 12.sp,
+        fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+        modifier = Modifier
+            .testTag(tag)
+            .clip(RoundedCornerShape(6.dp))
+            .background(if (active) Palette.bookmark else Palette.panel2)
+            .clickableNoRipple(onClick)
+            .padding(horizontal = 12.dp, vertical = 7.dp),
+    )
+}
+
+/** Label and current value on one line, the slider under it. */
+@Composable
+private fun Setting(
+    label: String,
+    value: String,
+    current: Float,
+    range: ClosedFloatingPointRange<Float>,
+    tag: String,
+    onChange: (Float) -> Unit,
+) {
+    Column(Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth()) {
+            Text(label, color = Palette.textDim, fontSize = 12.sp, modifier = Modifier.weight(1f))
+            Text(value, color = Palette.text, fontSize = 12.sp,
+                 fontFamily = FontFamily.Monospace)
+        }
+        Slider(
+            value = current,
+            onValueChange = onChange,
+            valueRange = range,
+            modifier = Modifier.fillMaxWidth().height(28.dp).testTag("slider:$tag"),
+            colors = SliderDefaults.colors(
+                thumbColor = Palette.accent,
+                activeTrackColor = Palette.accent,
+                inactiveTrackColor = Palette.panel2,
+            ),
+        )
     }
 }
