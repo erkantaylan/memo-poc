@@ -10,7 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -78,6 +78,9 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
+    var returnTo by androidx.compose.runtime.remember {
+        androidx.compose.runtime.mutableStateOf<Int?>(null)
+    }
     val context = LocalContext.current
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
 
@@ -123,6 +126,13 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                 listState.scrollBy(state.startFraction * info.size)
             }
         }
+    }
+
+    // Returning from a look: scroll back, then forget the request.
+    LaunchedEffect(returnTo) {
+        val back = returnTo ?: return@LaunchedEffect
+        listState.scrollToItem(back)
+        returnTo = null
     }
 
     // Walking the hits scrolls the list; the paragraph is all we need, since a
@@ -205,6 +215,32 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
             )
         }
 
+        // The way back from a look. It costs one line and only exists while you
+        // are actually away.
+        state.excursion?.let { away ->
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .background(Palette.bookmark)
+                    .testTag("excursion")
+                    .clickableNoRipple {
+                        viewModel.returnFromExcursion()?.let { back ->
+                            returnTo = back
+                        }
+                    }
+                    .padding(horizontal = 14.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("\u2039 Back to ${away.label}", color = Palette.accent, fontSize = 11.5.sp,
+                     modifier = Modifier.weight(1f))
+                Text("Stay", color = Palette.textDim, fontSize = 11.sp,
+                     modifier = Modifier
+                         .testTag("excursion_stay")
+                         .clickableNoRipple { viewModel.endExcursion() }
+                         .padding(horizontal = 8.dp, vertical = 2.dp))
+            }
+        }
+
         LinearProgressIndicator(
             progress = { progress },
             color = Palette.accent,
@@ -242,15 +278,21 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                     val marks = state.bookmarks.filter { it.paragraphIndex == paragraph.index }
 
                     // Highlight each marked word rather than the whole block.
+                    // Live selection while the finger is down. Null the rest of
+                    // the time, so it costs nothing to the paragraphs you are
+                    // only reading.
+                    var dragging by androidx.compose.runtime.remember(paragraph.index) {
+                        androidx.compose.runtime.mutableStateOf<IntRange?>(null)
+                    }
                     val wordSpacing = state.style.wordSpacing
                     val hits = state.matches.filter { it.paragraph == paragraph.index }
                     val here = state.matches.getOrNull(state.matchIndex)
                     val rendered = androidx.compose.runtime.remember(
                         paragraph.text, marks, state.bionic, state.bionicStrength, wordSpacing,
-                        hits, here,
+                        hits, here, dragging,
                     ) {
                         if (marks.isEmpty() && !state.bionic && wordSpacing == 0f &&
-                            hits.isEmpty()) {
+                            hits.isEmpty() && dragging == null) {
                             androidx.compose.ui.text.AnnotatedString(paragraph.text)
                         } else {
                             androidx.compose.ui.text.buildAnnotatedString {
@@ -301,6 +343,19 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                                         from, to,
                                     )
                                 }
+                                // What the finger is covering right now, over
+                                // everything else, because it is the only part
+                                // that answers "am I selecting what I meant to".
+                                dragging?.let { span ->
+                                    addStyle(
+                                        androidx.compose.ui.text.SpanStyle(
+                                            background = Palette.accent,
+                                            color = Palette.bg,
+                                        ),
+                                        span.first.coerceIn(0, paragraph.text.length),
+                                        (span.last + 1).coerceIn(0, paragraph.text.length),
+                                    )
+                                }
                                 // Hits last, so the one you are standing on
                                 // wins over a bookmark sitting on the same word.
                                 hits.forEach { hit ->
@@ -323,6 +378,7 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                         androidx.compose.runtime.mutableStateOf<
                             androidx.compose.ui.text.TextLayoutResult?>(null)
                     }
+                    val layoutRef = androidx.compose.runtime.rememberUpdatedState(layout)
 
                     Text(
                         rendered,
@@ -342,24 +398,49 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                         onTextLayout = { layout = it },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .pointerInput(paragraph.index, layout) {
-                                detectTapGestures(
-                                    onLongPress = { position ->
-                                        // Map the touch to a character, so the
-                                        // mark lands on the word under the finger.
-                                        val result = layout ?: return@detectTapGestures
-                                        val index = result.getOffsetForPosition(position)
-                                        val what =
-                                            viewModel.toggleBookmarkAt(paragraph.index, index)
-                                        Toast.makeText(
-                                            context,
-                                            when (what) {
-                                                BookmarkToggle.ADDED -> "Bookmarked"
-                                                BookmarkToggle.REMOVED -> "Bookmark removed"
-                                                BookmarkToggle.NO_WORD -> "No word there"
-                                            },
-                                            Toast.LENGTH_SHORT,
-                                        ).show()
+                            // Keyed on the paragraph alone, never on the
+                            // layout: selecting redraws the text, which hands
+                            // back a fresh TextLayoutResult, which would
+                            // restart this block and kill the drag halfway
+                            // through. Read the layout through a ref instead.
+                            .pointerInput(paragraph.index) {
+                                // Press and lift marks the word under the
+                                // finger; press and drag marks everything the
+                                // finger crosses. One gesture, because holding
+                                // still is just a drag of length zero.
+                                var anchor = 0
+                                detectDragGesturesAfterLongPress(
+                                    onDragStart = { position ->
+                                        val result = layoutRef.value
+                                            ?: return@detectDragGesturesAfterLongPress
+                                        anchor = result.getOffsetForPosition(position)
+                                        dragging = anchor..anchor
+                                    },
+                                    onDrag = { change, _ ->
+                                        val result = layoutRef.value
+                                            ?: return@detectDragGesturesAfterLongPress
+                                        val at = result.getOffsetForPosition(change.position)
+                                        dragging = minOf(anchor, at)..maxOf(anchor, at)
+                                    },
+                                    // Lifting without moving arrives here, not
+                                    // at onDragEnd — so a plain long press is
+                                    // a cancelled drag of length zero, and
+                                    // still means "mark this word".
+                                    onDragCancel = {
+                                        val span = dragging
+                                        dragging = null
+                                        if (span != null && span.first == span.last) {
+                                            say(context, viewModel.toggleBookmarkAt(
+                                                paragraph.index, anchor))
+                                        }
+                                    },
+                                    onDragEnd = {
+                                        val span = dragging
+                                        dragging = null
+                                        say(context, if (span == null || span.first == span.last)
+                                            viewModel.toggleBookmarkAt(paragraph.index, anchor)
+                                        else viewModel.bookmarkRange(
+                                            paragraph.index, span.first, span.last + 1))
                                     },
                                 )
                             }
@@ -734,4 +815,17 @@ private fun SearchBar(
              modifier = Modifier.testTag("search_close")
                  .clickableNoRipple(onClose).padding(start = 6.dp))
     }
+}
+
+/** One place that turns a bookmark outcome into words. */
+private fun say(context: android.content.Context, what: BookmarkToggle) {
+    Toast.makeText(
+        context,
+        when (what) {
+            BookmarkToggle.ADDED -> "Bookmarked"
+            BookmarkToggle.REMOVED -> "Bookmark removed"
+            BookmarkToggle.NO_WORD -> "No word there"
+        },
+        Toast.LENGTH_SHORT,
+    ).show()
 }

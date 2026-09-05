@@ -16,8 +16,35 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
+/** How much of a long passage a bookmark shows as its label. */
+private const val LABEL_CHARS = 90
+
 /** How far a long press may reach for a word before giving up. */
 private const val NEAREST_WORD_REACH = 48
+
+/**
+ * A trip away from where you were reading.
+ *
+ * Jumping to a search hit or a bookmark is not reading, but the reader records
+ * position continuously and cannot tell the difference — so a glance at
+ * chapter twelve used to cost you your place in chapter three. While an
+ * excursion is open no progress is written, and one tap puts you back.
+ *
+ * It closes itself once you have stayed long enough to be reading rather than
+ * looking, at which point where you are becomes where you are.
+ */
+data class Excursion(
+    val offset: Int,
+    val paragraph: Int,
+    val label: String,
+    val dwellMs: Long = 0,
+)
+
+/** Long enough to be reading rather than looking. */
+private const val EXCURSION_SETTLES_MS = 90_000L
+
+/** How often ReaderScreen ticks; the excursion counts in the same beats. */
+private const val TICK_MS = 5_000L
 
 /** What a long press did, so the reader can say so. */
 enum class BookmarkToggle { ADDED, REMOVED, NO_WORD }
@@ -40,6 +67,8 @@ data class ReaderUiState(
     val style: ReaderStyle = ReaderStyle.DEFAULT,
     /** The reading panel: bionic, strength and text size, over the text. */
     val showPanel: Boolean = false,
+    /** Set while you are away from where you were actually reading. */
+    val excursion: Excursion? = null,
     val searchOpen: Boolean = false,
     val query: String = "",
     val matches: List<Match> = emptyList(),
@@ -85,7 +114,8 @@ class ReaderViewModel(
         viewModelScope.launch {
             runCatching { TextExtractor.extract(item, store.fileFor(item), cacheDir) }
                 .onSuccess { book ->
-                    val saved = openAtOffset ?: progress.of(item.id)?.charOffset ?: 0
+                    val reading = progress.of(item.id)?.charOffset ?: 0
+                    val saved = openAtOffset ?: reading
                     val index = book.paragraphAt(saved)
                     val para = book.paragraphs.getOrNull(index)
                     // Where inside that paragraph the offset fell. Restoring
@@ -106,6 +136,16 @@ class ReaderViewModel(
                             markedParagraphs = bookmarks.forBook(item.id)
                                 .map { b -> b.paragraphIndex }.toSet(),
                             bookmarks = bookmarks.forBook(item.id),
+                            // Opened at a bookmark rather than at your place:
+                            // that is a look, so keep the way back rather than
+                            // letting the bookmark quietly become your place.
+                            excursion = if (openAtOffset != null && openAtOffset != reading)
+                                Excursion(
+                                    offset = reading,
+                                    paragraph = book.paragraphAt(reading),
+                                    label = percentOf(reading, book.charCount),
+                                )
+                            else null,
                         )
                     }
                     // Characters per word differs per book — Turkish runs
@@ -139,6 +179,10 @@ class ReaderViewModel(
 
         tracker?.sample(offset)
         refreshSpeed()
+
+        // An excursion is a look, not a read. Speed still counts — your eyes
+        // move either way — but where you were stays where it was.
+        if (_state.value.excursion != null) return
 
         progress.save(
             BookProgress(
@@ -178,6 +222,45 @@ class ReaderViewModel(
                 // text around it as context.
                 preview = para.text
                     .substring(maxOf(0, wordStart - 40), minOf(para.text.length, wordStart + 120))
+                    .replace(Regex("\\s+"), " ")
+                    .trim(),
+                createdAt = System.currentTimeMillis(),
+            )
+        )
+        refreshBookmarks()
+        return if (added) BookmarkToggle.ADDED else BookmarkToggle.REMOVED
+    }
+
+    /**
+     * Bookmark a run of text the finger dragged over, snapped out to whole
+     * words at both ends — half of "Komatsu" is not a thing you meant to keep.
+     */
+    fun bookmarkRange(paragraphIndex: Int, from: Int, to: Int): BookmarkToggle {
+        val para = _state.value.book.paragraphs.getOrNull(paragraphIndex)
+            ?: return BookmarkToggle.NO_WORD
+        val lo = minOf(from, to)
+        val hi = maxOf(from, to)
+        val start = wordBoundsAt(para.text, lo)?.first ?: return BookmarkToggle.NO_WORD
+        val end = wordBoundsAt(para.text, (hi - 1).coerceAtLeast(lo))?.second
+            ?: return BookmarkToggle.NO_WORD
+        if (end <= start) return BookmarkToggle.NO_WORD
+
+        val text = para.text.substring(start, end)
+        val added = bookmarks.toggle(
+            Bookmark(
+                id = newBookmarkId(),
+                itemId = item.id,
+                bookTitle = item.title,
+                author = item.author,
+                charOffset = para.start + start,
+                paragraphIndex = paragraphIndex,
+                wordLength = end - start,
+                // The label is what you see in a list, so a long passage is cut
+                // short there while the mark itself keeps its full length.
+                word = if (text.length <= LABEL_CHARS) text
+                       else text.take(LABEL_CHARS).trimEnd() + "\u2026",
+                preview = para.text
+                    .substring(maxOf(0, start - 40), minOf(para.text.length, end + 80))
                     .replace(Regex("\\s+"), " ")
                     .trim(),
                 createdAt = System.currentTimeMillis(),
@@ -264,7 +347,15 @@ class ReaderViewModel(
     }
 
     /** Recomputes the speed as time passes, not only as the position moves. */
-    fun onTick() = refreshSpeed()
+    fun onTick() {
+        val away = _state.value.excursion
+        if (away != null) {
+            val dwelt = away.dwellMs + TICK_MS
+            if (dwelt >= EXCURSION_SETTLES_MS) endExcursion()
+            else _state.update { it.copy(excursion = away.copy(dwellMs = dwelt)) }
+        }
+        refreshSpeed()
+    }
 
     /** For when a scroll through the pages has polluted the figure. */
     fun resetSpeed() {
@@ -285,6 +376,40 @@ class ReaderViewModel(
             it.copy(wpm = wpm, wpmProvisional = provisional, minutesLeft = minutes)
         }
     }
+
+    /**
+     * Leave your place to go and look at something, keeping a way back.
+     *
+     * The anchor is taken once: stepping through twelve search hits is one
+     * excursion from where you started, not twelve nested ones.
+     */
+    fun beginExcursion() = _state.update {
+        if (it.excursion != null) it
+        else it.copy(
+            excursion = Excursion(
+                offset = lastOffset,
+                paragraph = it.book.paragraphAt(lastOffset),
+                label = percentOf(lastOffset, it.book.charCount),
+            )
+        )
+    }
+
+    /** Stay: where you have ended up becomes where you were. */
+    fun endExcursion() {
+        if (_state.value.excursion == null) return
+        _state.update { it.copy(excursion = null) }
+        onScrolled(_state.value.book.paragraphAt(lastOffset), 0f)
+    }
+
+    /** Go back, and forget the trip. */
+    fun returnFromExcursion(): Int? {
+        val at = _state.value.excursion ?: return null
+        _state.update { it.copy(excursion = null) }
+        return at.paragraph
+    }
+
+    private fun percentOf(offset: Int, total: Int): String =
+        if (total <= 0) "" else "${(offset * 100 / total).coerceIn(0, 100)}%"
 
     fun setSearchOpen(open: Boolean) = _state.update {
         // Closing clears the query, so reopening does not resume someone
@@ -312,14 +437,26 @@ class ReaderViewModel(
                 // Land on the first hit at or after where you are reading,
                 // because you are looking for the next one, not the first in
                 // the book.
-                else it.copy(matches = hits, matchIndex = if (hits.isEmpty()) -1 else
+                else it.copy(
+                    excursion = it.excursion ?: if (hits.isEmpty()) null else Excursion(
+                        offset = lastOffset,
+                        paragraph = it.book.paragraphAt(lastOffset),
+                        label = percentOf(lastOffset, it.book.charCount),
+                    ),
+                    matches = hits, matchIndex = if (hits.isEmpty()) -1 else
                     hits.indexOfFirst { m -> m.paragraph >= it.startParagraph }
-                        .takeIf { at -> at >= 0 } ?: 0)
+                        .takeIf { at -> at >= 0 } ?: 0,
+                )
             }
         }
     }
 
-    fun stepMatch(delta: Int) = _state.update {
+    fun stepMatch(delta: Int) {
+        beginExcursion()
+        stepMatchOnly(delta)
+    }
+
+    private fun stepMatchOnly(delta: Int) = _state.update {
         if (it.matches.isEmpty()) it
         else it.copy(
             matchIndex = ((it.matchIndex + delta) % it.matches.size + it.matches.size)
