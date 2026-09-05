@@ -1021,6 +1021,20 @@ private fun Handle(
     if (y < -SIZE_PX || y > page.height + SIZE_PX) return
 
     val density = LocalDensity.current
+    // Everything the gesture needs, read fresh each frame but never restarting
+    // it. Keying pointerInput on the paragraph would tear the drag down the
+    // instant a handle crossed into the next one — which is precisely the
+    // boundary it was meant to cross.
+    val here = androidx.compose.runtime.rememberUpdatedState(
+        Offset(page.left + x, page.top + y))
+    val move = androidx.compose.runtime.rememberUpdatedState(onMove)
+    // The finger's position in root space, carried across the whole drag. The
+    // handle moves as the selection grows, so its own coordinates cannot be
+    // the reference — only the accumulated movement can.
+    var finger by androidx.compose.runtime.remember { 
+        androidx.compose.runtime.mutableStateOf(Offset.Zero)
+    }
+
     Box(
         Modifier
             .offset {
@@ -1031,16 +1045,20 @@ private fun Handle(
             }
             .size(SIZE)
             .testTag(if (end) "handle_end" else "handle_start")
-            .pointerInput(paragraph, end) {
-                detectDragGestures { change, _ ->
-                    // The finger is on the handle, but the character we want is
-                    // where the handle points, a little above it.
-                    val root = Offset(
-                        page.left + x + change.position.x,
-                        page.top + y + change.position.y - with(density) { SIZE.toPx() },
-                    )
-                    offsetAt(placed, root)?.let { (p, o) -> onMove(p, o) }
-                }
+            .pointerInput(end) {
+                val lift = with(density) { SIZE.toPx() }
+                detectDragGestures(
+                    onDragStart = { local ->
+                        // The handle hangs below the line it belongs to, so the
+                        // character under it is a line's worth above the finger.
+                        finger = here.value + local - Offset(0f, lift)
+                    },
+                    onDrag = { change, amount ->
+                        change.consume()
+                        finger += amount
+                        offsetAt(placed, finger)?.let { (p, o) -> move.value(p, o) }
+                    },
+                )
             }
             .clip(CircleShape)
             .background(Palette.accent),
