@@ -6,6 +6,8 @@ import com.erkantaylan.kitaplik.catalog.LibraryItem
 import com.erkantaylan.kitaplik.storage.LibraryStore
 import com.erkantaylan.kitaplik.text.BookText
 import com.erkantaylan.kitaplik.text.TextExtractor
+import com.erkantaylan.kitaplik.ui.theme.Highlight
+import com.erkantaylan.kitaplik.ui.theme.Palette
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -65,6 +67,9 @@ data class ReaderUiState(
     val bionic: Boolean = false,
     val bionicStrength: BionicStrength = BionicStrength.MEDIUM,
     val style: ReaderStyle = ReaderStyle.DEFAULT,
+    val paper: Boolean = false,
+    /** The colour a new mark will be painted, remembered between books. */
+    val highlight: Highlight = Highlight.YELLOW,
     /** The reading panel: bionic, strength and text size, over the text. */
     val showPanel: Boolean = false,
     /** Set while you are away from where you were actually reading. */
@@ -95,6 +100,8 @@ class ReaderViewModel(
             bionic = preferences.bionic,
             bionicStrength = preferences.strength,
             style = preferences.style,
+            paper = preferences.paper,
+            highlight = preferences.highlight,
         )
     )
     val state: StateFlow<ReaderUiState> = _state.asStateFlow()
@@ -280,6 +287,7 @@ class ReaderViewModel(
     fun bookmarkSpan(
         fromParagraph: Int, fromOffset: Int,
         toParagraph: Int, toOffset: Int,
+        colour: Highlight = _state.value.highlight,
     ): BookmarkToggle {
         val book = _state.value.book
         val forward = fromParagraph < toParagraph ||
@@ -327,6 +335,7 @@ class ReaderViewModel(
                     .replace(Regex("\\s+"), " ")
                     .trim(),
                 createdAt = System.currentTimeMillis(),
+                color = colour,
             )
         )
         refreshBookmarks()
@@ -538,6 +547,17 @@ class ReaderViewModel(
     fun setBionicStrength(strength: BionicStrength) {
         preferences.strength = strength
         _state.update { it.copy(bionicStrength = strength) }
+    }
+
+    fun setPaper(paper: Boolean) {
+        preferences.paper = paper
+        Palette.scheme = preferences.scheme
+        _state.update { it.copy(paper = paper) }
+    }
+
+    fun setHighlight(colour: Highlight) {
+        preferences.highlight = colour
+        _state.update { it.copy(highlight = colour) }
     }
 
     /** Every control writes the whole blob, the way the memoriser did. */

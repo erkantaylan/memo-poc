@@ -71,6 +71,7 @@ import com.erkantaylan.kitaplik.reader.BookmarkToggle
 import com.erkantaylan.kitaplik.reader.bionicSpans
 import com.erkantaylan.kitaplik.reader.ReaderViewModel
 import com.erkantaylan.kitaplik.reader.formatDuration
+import com.erkantaylan.kitaplik.ui.theme.Highlight
 import com.erkantaylan.kitaplik.ui.theme.Palette
 import android.widget.Toast
 import androidx.compose.ui.platform.LocalContext
@@ -236,6 +237,8 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                 bionic = state.bionic,
                 strength = state.bionicStrength,
                 style = state.style,
+                paper = state.paper,
+                onPaper = viewModel::setPaper,
                 onBionic = viewModel::setBionic,
                 onStrength = viewModel::setBionicStrength,
                 onStyle = viewModel::setStyle,
@@ -249,7 +252,7 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .background(Palette.bookmark)
+                    .background(Palette.selected)
                     .testTag("excursion")
                     .clickableNoRipple {
                         viewModel.returnFromExcursion()?.let { back ->
@@ -333,6 +336,11 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                     val rendered = androidx.compose.runtime.remember(
                         paragraph.text, marks, state.bionic, state.bionicStrength, wordSpacing,
                         hits, here, dragging,
+                        // Every colour below comes from the scheme, so the
+                        // cached string has to be rebuilt when the scheme
+                        // changes — otherwise switching to paper leaves the
+                        // highlights painted for the dark.
+                        Palette.scheme,
                     ) {
                         if (marks.isEmpty() && !state.bionic && wordSpacing == 0f &&
                             hits.isEmpty() && dragging == null) {
@@ -384,8 +392,8 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                                         paragraph.start).coerceIn(from, paragraph.text.length)
                                     addStyle(
                                         androidx.compose.ui.text.SpanStyle(
-                                            background = Palette.bookmark,
-                                            color = Palette.text,
+                                            background = Palette.highlight(mark.color),
+                                            color = Palette.onHighlight,
                                         ),
                                         from, to,
                                     )
@@ -396,8 +404,8 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                                 dragging?.let { span ->
                                     addStyle(
                                         androidx.compose.ui.text.SpanStyle(
-                                            background = Palette.accent,
-                                            color = Palette.bg,
+                                            background = Palette.highlight(state.highlight),
+                                            color = Palette.onHighlight,
                                         ),
                                         span.first.coerceIn(0, paragraph.text.length),
                                         (span.last + 1).coerceIn(0, paragraph.text.length),
@@ -522,6 +530,8 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
             SelectionBar(
                 length = range?.let { it.last - it.first + 1 } ?: 0,
                 existing = range?.let { viewModel.markUnder(it) } != null,
+                colour = state.highlight,
+                onColour = viewModel::setHighlight,
                 onCancel = { selection = null },
                 onSave = {
                     say(context, viewModel.bookmarkSpan(
@@ -625,6 +635,8 @@ private fun ReadingPanel(
     bionic: Boolean,
     strength: BionicStrength,
     style: ReaderStyle,
+    paper: Boolean,
+    onPaper: (Boolean) -> Unit,
     onBionic: (Boolean) -> Unit,
     onStrength: (BionicStrength) -> Unit,
     onStyle: (ReaderStyle) -> Unit,
@@ -658,6 +670,10 @@ private fun ReadingPanel(
 
         when (pane) {
             PanelTab.READING -> {
+                Labelled("Theme") {
+                    Segmented("theme", listOf("Paper" to true, "Night" to false),
+                              paper) { onPaper(it) }
+                }
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("Bionic reading", color = Palette.text, fontSize = 12.5.sp)
@@ -774,7 +790,7 @@ private fun <T> Segmented(
                 modifier = Modifier
                     .testTag("$tag:${label.lowercase()}")
                     .clip(RoundedCornerShape(5.dp))
-                    .background(if (on) Palette.bookmark else Palette.panel2)
+                    .background(if (on) Palette.selected else Palette.panel2)
                     .clickableNoRipple { onSelect(value) }
                     .padding(horizontal = 11.dp, vertical = 5.dp),
             )
@@ -1078,6 +1094,8 @@ private const val SIZE_PX = 80f
 private fun SelectionBar(
     length: Int,
     existing: Boolean,
+    colour: Highlight,
+    onColour: (Highlight) -> Unit,
     onCancel: () -> Unit,
     onSave: () -> Unit,
 ) {
@@ -1089,11 +1107,26 @@ private fun SelectionBar(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            if (length > 0) "$length characters" else "Nothing selected",
+            if (length > 0) "$length" else "—",
             color = Palette.textDim,
-            fontSize = 11.5.sp,
-            modifier = Modifier.weight(1f),
+            fontSize = 11.sp,
+            fontFamily = FontFamily.Monospace,
         )
+        Box(Modifier.size(10.dp))
+        // The colours sit next to Save because they are part of what Save
+        // does, not a setting you go somewhere else to change.
+        Highlight.entries.forEach { option ->
+            Box(
+                Modifier
+                    .testTag("ink:${option.name.lowercase()}")
+                    .size(if (option == colour) 26.dp else 20.dp)
+                    .clip(CircleShape)
+                    .background(Palette.highlight(option))
+                    .clickableNoRipple { onColour(option) }
+            )
+            Box(Modifier.size(6.dp))
+        }
+        Box(Modifier.weight(1f))
         Text(
             "Cancel",
             color = Palette.textDim,
@@ -1114,7 +1147,7 @@ private fun SelectionBar(
             modifier = Modifier
                 .testTag("selection_save")
                 .clip(RoundedCornerShape(7.dp))
-                .background(Palette.bookmark)
+                .background(Palette.selected)
                 .clickableNoRipple(onSave)
                 .padding(horizontal = 18.dp, vertical = 8.dp),
         )

@@ -2,6 +2,7 @@ package com.erkantaylan.kitaplik.reader
 
 import android.content.Context
 import androidx.core.content.edit
+import com.erkantaylan.kitaplik.ui.theme.Highlight
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -31,6 +32,8 @@ data class Bookmark(
     val preview: String,
     val note: String = "",
     val createdAt: Long,
+    /** Marks made before colours existed are yellow, like a highlighter. */
+    val color: Highlight = Highlight.YELLOW,
 )
 
 class BookmarkStore(context: Context) {

@@ -2,6 +2,10 @@ package com.erkantaylan.kitaplik.reader
 
 import android.content.Context
 import androidx.core.content.edit
+import com.erkantaylan.kitaplik.ui.theme.Highlight
+import com.erkantaylan.kitaplik.ui.theme.Night
+import com.erkantaylan.kitaplik.ui.theme.Paper
+import com.erkantaylan.kitaplik.ui.theme.Scheme
 
 /**
  * How the page is set: the typographic choices, separate from what is on it.
@@ -72,6 +76,20 @@ class ReaderPreferences(context: Context) {
         }.getOrDefault(BionicStrength.MEDIUM)
         set(value) = prefs.edit { putString(KEY_STRENGTH, value.name) }
 
+    /** Paper or night. One is chosen, not derived from the time of day. */
+    var paper: Boolean
+        get() = prefs.getBoolean(KEY_PAPER, false)
+        set(value) = prefs.edit { putBoolean(KEY_PAPER, value) }
+
+    val scheme: Scheme get() = if (paper) Paper else Night
+
+    /** The colour the selection bar opens on: whichever you used last. */
+    var highlight: Highlight
+        get() = runCatching {
+            Highlight.valueOf(prefs.getString(KEY_HIGHLIGHT, null) ?: "")
+        }.getOrDefault(Highlight.YELLOW)
+        set(value) = prefs.edit { putString(KEY_HIGHLIGHT, value.name) }
+
     var style: ReaderStyle
         get() = ReaderStyle(
             font = runCatching {
@@ -106,5 +124,7 @@ class ReaderPreferences(context: Context) {
         const val KEY_WORD = "word_spacing"
         const val KEY_MARGIN = "margin"
         const val KEY_ALIGN = "align"
+        const val KEY_PAPER = "paper"
+        const val KEY_HIGHLIGHT = "highlight"
     }
 }

@@ -58,6 +58,8 @@ class MainActivity : ComponentActivity() {
         val progress = ReadingProgressStore(this)
         val bookmarks = BookmarkStore(this)
         val readerPrefs = ReaderPreferences(this)
+        // Before the first frame, so the app never flashes the other theme.
+        Palette.scheme = readerPrefs.scheme
         val textCache = File(cacheDir, "text")
 
         setContent {

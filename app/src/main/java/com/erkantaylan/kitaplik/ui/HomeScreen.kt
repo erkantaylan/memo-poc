@@ -26,7 +26,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.draw.drawBehind
 import com.erkantaylan.kitaplik.ui.theme.Palette
+import com.erkantaylan.kitaplik.ui.theme.Highlight
 
 /**
  * Landing screen: what you are in the middle of, then what you touched last.
@@ -126,7 +128,15 @@ private fun BookmarkRow(
             .padding(bottom = 8.dp)
             .clip(RoundedCornerShape(10.dp))
             .background(Palette.panel)
+            // The mark's own colour down its left edge, so a list of them can
+            // be read by colour before it is read by word.
             .border(1.dp, Palette.border, RoundedCornerShape(10.dp))
+            .drawBehind {
+                drawRect(
+                    color = highlightOf(mark.color),
+                    size = androidx.compose.ui.geometry.Size(10.dp.toPx(), size.height),
+                )
+            }
             .testTagged("bookmark:${mark.id}")
             // Long press removes, the same gesture that created the mark in
             // the reader. Until now nothing called onRemove at all, so the
@@ -147,7 +157,7 @@ private fun BookmarkRow(
         if (mark.word.isNotBlank()) {
             Text(
                 mark.word,
-                color = Palette.accent,
+                color = Palette.text,
                 fontSize = 15.sp,
                 fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
             )
@@ -294,3 +304,6 @@ fun ComingSoonScreen(title: String, detail: String) {
         }
     }
 }
+
+/** A bookmark's colour, for drawing it outside the reader. */
+private fun highlightOf(colour: Highlight) = Palette.highlight(colour)
