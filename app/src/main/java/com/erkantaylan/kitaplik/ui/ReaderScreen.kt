@@ -45,7 +45,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
@@ -304,7 +304,7 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
             }
 
             else -> Box(Modifier.fillMaxSize().onGloballyPositioned {
-                pageBounds = it.boundsInRoot()
+                pageBounds = it.unclippedBounds()
             }) {
             LazyColumn(
                 state = listState,
@@ -468,7 +468,7 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                             .onGloballyPositioned { coords ->
                                 placed[paragraph.index] =
                                     (placed[paragraph.index] ?: Placed())
-                                        .copy(bounds = coords.boundsInRoot())
+                                        .copy(bounds = coords.unclippedBounds())
                             }
                             // Keyed on the paragraph alone, never on the
                             // layout: selecting redraws the text, which hands
@@ -1270,4 +1270,17 @@ private fun BookmarkRail(
             )
         }
     }
+}
+
+/**
+ * Where a node really is, ignoring what is clipping it.
+ *
+ * boundsInRoot() intersects with every ancestor's clip, so a paragraph
+ * scrolled halfway off the top reports the viewport's edge as its own — and a
+ * handle pinned to a character in it then never moves, because the number it
+ * is following has stopped changing. positionInRoot() is not clipped.
+ */
+private fun androidx.compose.ui.layout.LayoutCoordinates.unclippedBounds(): Rect {
+    val at = positionInRoot()
+    return Rect(at, androidx.compose.ui.geometry.Size(size.width.toFloat(), size.height.toFloat()))
 }
