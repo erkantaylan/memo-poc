@@ -26,6 +26,7 @@ import com.erkantaylan.kitaplik.catalog.HttpCatalogSource
 import com.erkantaylan.kitaplik.catalog.LibraryItem
 import com.erkantaylan.kitaplik.download.Downloader
 import com.erkantaylan.kitaplik.reader.BookmarkStore
+import com.erkantaylan.kitaplik.reader.ReaderPreferences
 import com.erkantaylan.kitaplik.reader.ReaderViewModel
 import com.erkantaylan.kitaplik.reader.ReadingProgressStore
 import com.erkantaylan.kitaplik.storage.LibraryStore
@@ -55,6 +56,7 @@ class MainActivity : ComponentActivity() {
         val store = LibraryStore(File(filesDir, "library"))
         val progress = ReadingProgressStore(this)
         val bookmarks = BookmarkStore(this)
+        val readerPrefs = ReaderPreferences(this)
         val textCache = File(cacheDir, "text")
 
         setContent {
@@ -120,7 +122,7 @@ class MainActivity : ComponentActivity() {
                             factory = viewModelFactory {
                                 initializer {
                                     ReaderViewModel(item, store, progress, bookmarks,
-                                                    textCache, offset)
+                                                    readerPrefs, textCache, offset)
                                 }
                             },
                         )

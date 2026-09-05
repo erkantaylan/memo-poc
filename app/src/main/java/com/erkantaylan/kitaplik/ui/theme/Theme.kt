@@ -31,6 +31,11 @@ object Palette {
     /** Body text sits a touch below UI text — long passages read softer. */
     val readerText = Color(0xFFD2C8B0)
 
+    // The tail of a word under bionic reading: the same ink, stepped back far
+    // enough that the head leads the eye, not so far that the word breaks in
+    // two. Bolder contrast than this and the page reads as a list of prefixes.
+    val readerTail = Color(0xFFA79E8B)
+
     /** Behind a bookmarked word: present, but not shouting. */
     val bookmark = Color(0xFF4A3B22)
 

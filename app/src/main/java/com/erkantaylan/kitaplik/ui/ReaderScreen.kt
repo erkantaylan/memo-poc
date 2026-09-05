@@ -42,7 +42,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.erkantaylan.kitaplik.reader.BionicStrength
 import com.erkantaylan.kitaplik.reader.BookmarkToggle
+import com.erkantaylan.kitaplik.reader.bionicSpans
 import com.erkantaylan.kitaplik.reader.ReaderViewModel
 import com.erkantaylan.kitaplik.reader.formatDuration
 import com.erkantaylan.kitaplik.ui.theme.Palette
@@ -152,9 +154,19 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
             },
             onBack = onBack,
             onBookmarks = { viewModel.setBookmarksVisible(!state.showBookmarks) },
-            onSmaller = { viewModel.adjustFont(-0.1f) },
-            onLarger = { viewModel.adjustFont(0.1f) },
+            onPanel = { viewModel.setPanelVisible(!state.showPanel) },
         )
+
+        if (state.showPanel) {
+            ReadingPanel(
+                bionic = state.bionic,
+                strength = state.bionicStrength,
+                onBionic = viewModel::setBionic,
+                onStrength = viewModel::setBionicStrength,
+                onSmaller = { viewModel.adjustFont(-0.1f) },
+                onLarger = { viewModel.adjustFont(0.1f) },
+            )
+        }
 
         LinearProgressIndicator(
             progress = { progress },
@@ -192,12 +204,33 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                     val marks = state.bookmarks.filter { it.paragraphIndex == paragraph.index }
 
                     // Highlight each marked word rather than the whole block.
-                    val rendered = androidx.compose.runtime.remember(paragraph.text, marks) {
-                        if (marks.isEmpty()) {
+                    val rendered = androidx.compose.runtime.remember(
+                        paragraph.text, marks, state.bionic, state.bionicStrength,
+                    ) {
+                        if (marks.isEmpty() && !state.bionic) {
                             androidx.compose.ui.text.AnnotatedString(paragraph.text)
                         } else {
                             androidx.compose.ui.text.buildAnnotatedString {
                                 append(paragraph.text)
+                                // Word weights first, so a bookmark's background
+                                // still reads as a mark on top of them.
+                                if (state.bionic) {
+                                    bionicSpans(paragraph.text, state.bionicStrength)
+                                        .forEach { word ->
+                                            addStyle(
+                                                androidx.compose.ui.text.SpanStyle(
+                                                    fontWeight = FontWeight.SemiBold,
+                                                ),
+                                                word.start, word.headEnd,
+                                            )
+                                            if (word.headEnd < word.end) addStyle(
+                                                androidx.compose.ui.text.SpanStyle(
+                                                    color = Palette.readerTail,
+                                                ),
+                                                word.headEnd, word.end,
+                                            )
+                                        }
+                                }
                                 marks.forEach { mark ->
                                     val from = (mark.charOffset - paragraph.start)
                                         .coerceIn(0, paragraph.text.length)
@@ -269,8 +302,7 @@ private fun ReaderBar(
     onResetSpeed: () -> Unit,
     onBack: () -> Unit,
     onBookmarks: () -> Unit,
-    onSmaller: () -> Unit,
-    onLarger: () -> Unit,
+    onPanel: () -> Unit,
 ) {
     Row(
         Modifier
@@ -320,13 +352,111 @@ private fun ReaderBar(
             modifier = Modifier.testTag("bookmarks")
                 .clickableNoRipple(onBookmarks).padding(8.dp),
         )
-        Text("A−", color = Palette.textDim, fontSize = 15.sp,
-             modifier = Modifier.testTag("font_smaller")
-                 .clickableNoRipple(onSmaller).padding(8.dp))
-        Text("A+", color = Palette.textDim, fontSize = 15.sp,
-             modifier = Modifier.testTag("font_larger")
-                 .clickableNoRipple(onLarger).padding(8.dp))
+        Text("\u2261", color = Palette.textDim, fontSize = 19.sp,
+             modifier = Modifier.testTag("reading_panel")
+                 .clickableNoRipple(onPanel).padding(horizontal = 10.dp, vertical = 4.dp))
     }
 }
 
 
+
+/**
+ * The reading panel: how the text is set, tuned while you are looking at it.
+ *
+ * It sits under the bar rather than in a bottom sheet, so the prose stays on
+ * screen — every control here changes the look of the page, and you want to see
+ * that happen rather than dismiss a sheet to find out.
+ */
+@Composable
+private fun ReadingPanel(
+    bionic: Boolean,
+    strength: BionicStrength,
+    onBionic: (Boolean) -> Unit,
+    onStrength: (BionicStrength) -> Unit,
+    onSmaller: () -> Unit,
+    onLarger: () -> Unit,
+) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(Palette.panel)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("Bionic reading", color = Palette.text, fontSize = 13.5.sp)
+                Text(
+                    "Weight the front of each word",
+                    color = Palette.textDim,
+                    fontSize = 11.sp,
+                )
+            }
+            Text(
+                if (bionic) "ON" else "OFF",
+                color = if (bionic) Palette.accent else Palette.textDim,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier
+                    .testTag("bionic_toggle")
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(if (bionic) Palette.bookmark else Palette.panel2)
+                    .clickableNoRipple { onBionic(!bionic) }
+                    .padding(horizontal = 14.dp, vertical = 7.dp),
+            )
+        }
+
+        // Strength only means anything while bionic is on, so it goes with it
+        // rather than sitting live above an off switch.
+        if (bionic) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Strength", color = Palette.textDim, fontSize = 12.sp,
+                     modifier = Modifier.weight(1f))
+                BionicStrength.entries.forEach { option ->
+                    val on = option == strength
+                    Text(
+                        option.label,
+                        color = if (on) Palette.accent else Palette.textDim,
+                        fontSize = 12.sp,
+                        modifier = Modifier
+                            .testTag("strength:${option.name.lowercase()}")
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(if (on) Palette.bookmark else Palette.panel2)
+                            .clickableNoRipple { onStrength(option) }
+                            .padding(horizontal = 11.dp, vertical = 6.dp),
+                    )
+                }
+            }
+        }
+
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("Text size", color = Palette.textDim, fontSize = 12.sp,
+                 modifier = Modifier.weight(1f))
+            Text("A−", color = Palette.text, fontSize = 15.sp,
+                 modifier = Modifier
+                     .testTag("font_smaller")
+                     .clip(RoundedCornerShape(6.dp))
+                     .background(Palette.panel2)
+                     .clickableNoRipple(onSmaller)
+                     .padding(horizontal = 14.dp, vertical = 5.dp))
+            Text("A+", color = Palette.text, fontSize = 15.sp,
+                 modifier = Modifier
+                     .testTag("font_larger")
+                     .clip(RoundedCornerShape(6.dp))
+                     .background(Palette.panel2)
+                     .clickableNoRipple(onLarger)
+                     .padding(horizontal = 14.dp, vertical = 5.dp))
+        }
+    }
+}

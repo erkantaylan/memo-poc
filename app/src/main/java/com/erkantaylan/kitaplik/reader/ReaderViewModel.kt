@@ -33,6 +33,10 @@ data class ReaderUiState(
     val wpmProvisional: Boolean = true,
     /** Minutes of reading left in this book at that speed, null if unknown. */
     val minutesLeft: Long? = null,
+    val bionic: Boolean = false,
+    val bionicStrength: BionicStrength = BionicStrength.MEDIUM,
+    /** The reading panel: bionic, strength and text size, over the text. */
+    val showPanel: Boolean = false,
     val markedParagraphs: Set<Int> = emptySet(),
     val bookmarks: List<Bookmark> = emptyList(),
     val showBookmarks: Boolean = false,
@@ -43,12 +47,15 @@ class ReaderViewModel(
     private val store: LibraryStore,
     private val progress: ReadingProgressStore,
     private val bookmarks: BookmarkStore,
+    private val preferences: ReaderPreferences,
     private val cacheDir: File,
     /** Set when opening from a bookmark, overriding the saved position. */
     private val openAtOffset: Int? = null,
 ) : ViewModel() {
 
-    private val _state = MutableStateFlow(ReaderUiState())
+    private val _state = MutableStateFlow(
+        ReaderUiState(bionic = preferences.bionic, bionicStrength = preferences.strength)
+    )
     val state: StateFlow<ReaderUiState> = _state.asStateFlow()
 
     private var tracker: SpeedTracker? = null
@@ -264,6 +271,19 @@ class ReaderViewModel(
         _state.update {
             it.copy(wpm = wpm, wpmProvisional = provisional, minutesLeft = minutes)
         }
+    }
+
+    fun setPanelVisible(visible: Boolean) =
+        _state.update { it.copy(showPanel = visible) }
+
+    fun setBionic(on: Boolean) {
+        preferences.bionic = on
+        _state.update { it.copy(bionic = on) }
+    }
+
+    fun setBionicStrength(strength: BionicStrength) {
+        preferences.strength = strength
+        _state.update { it.copy(bionicStrength = strength) }
     }
 
     fun adjustFont(delta: Float) {
