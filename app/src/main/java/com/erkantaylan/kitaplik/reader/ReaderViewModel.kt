@@ -231,6 +231,43 @@ class ReaderViewModel(
         return if (added) BookmarkToggle.ADDED else BookmarkToggle.REMOVED
     }
 
+    /** The word around an offset, for opening a selection on it. */
+    fun wordSpanAt(paragraphIndex: Int, offset: Int): IntRange? {
+        val para = _state.value.book.paragraphs.getOrNull(paragraphIndex) ?: return null
+        val (start, end) = wordBoundsAt(para.text, offset) ?: return null
+        return start until end
+    }
+
+    /**
+     * A selection expressed the way everything else in this app is: one range
+     * of characters into the whole book, whatever paragraphs it crosses.
+     */
+    fun globalRange(
+        fromParagraph: Int, fromOffset: Int,
+        toParagraph: Int, toOffset: Int,
+    ): IntRange? {
+        val book = _state.value.book
+        val forward = fromParagraph < toParagraph ||
+            (fromParagraph == toParagraph && fromOffset <= toOffset)
+        val head = book.paragraphs.getOrNull(
+            if (forward) fromParagraph else toParagraph) ?: return null
+        val tail = book.paragraphs.getOrNull(
+            if (forward) toParagraph else fromParagraph) ?: return null
+        val headAt = if (forward) fromOffset else toOffset
+        val tailAt = if (forward) toOffset else fromOffset
+
+        val start = wordBoundsAt(head.text, headAt)?.first ?: return null
+        val end = wordBoundsAt(tail.text, (tailAt - 1).coerceAtLeast(0))?.second ?: return null
+        val lo = head.start + start
+        val hi = tail.start + end
+        return if (hi > lo) lo until hi else null
+    }
+
+    /** Whether a selection sits on a mark already, which turns Save into Remove. */
+    fun markUnder(range: IntRange): Bookmark? = _state.value.bookmarks.firstOrNull {
+        it.charOffset < range.last + 1 && range.first < it.charOffset + maxOf(it.wordLength, 1)
+    }
+
     /**
      * Bookmark a passage the finger dragged over, snapped out to whole words at
      * both ends — half of "Komatsu" is not a thing you meant to keep.

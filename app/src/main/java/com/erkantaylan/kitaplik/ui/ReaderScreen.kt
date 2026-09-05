@@ -10,7 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -35,6 +35,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -95,6 +101,14 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
     // callbacks, so making it observable would buy nothing and cost a
     // recomposition every time the list moves.
     val placed = androidx.compose.runtime.remember { mutableMapOf<Int, Placed>() }
+    // Where the page sits in root space, so a handle can be positioned inside
+    // it from a paragraph rectangle measured against the root.
+    var pageBounds by androidx.compose.runtime.remember {
+        androidx.compose.runtime.mutableStateOf(Rect.Zero)
+    }
+
+    // Back leaves the selection before it leaves the search or the book.
+    if (selection != null) BackHandler { selection = null }
     val context = LocalContext.current
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
 
@@ -264,6 +278,7 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
             modifier = Modifier.fillMaxWidth().height(2.dp),
         )
 
+        Box(Modifier.weight(1f)) {
         when {
             state.loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = Palette.accent)
@@ -281,7 +296,10 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                 )
             }
 
-            else -> LazyColumn(
+            else -> Box(Modifier.fillMaxSize().onGloballyPositioned {
+                pageBounds = it.boundsInRoot()
+            }) {
+            LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize().testTag("reader_text"),
                 contentPadding = PaddingValues(
@@ -441,63 +459,77 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                             // back a fresh TextLayoutResult, which would
                             // restart this block and kill the drag halfway
                             // through. Read the layout through a ref instead.
-                            .pointerInput(paragraph.index) {
+                            .pointerInput(paragraph.index, selection == null) {
+                                // Stand down while a selection is open: the
+                                // handles own the ends, and the list must
+                                // scroll normally so you can reach a paragraph
+                                // that is not on screen yet.
+                                if (selection != null) return@pointerInput
                                 // Press and lift marks the word under the
                                 // finger; press and drag marks everything the
                                 // finger crosses, across paragraph breaks and
                                 // all. One gesture, because holding still is
                                 // just a drag of length zero.
-                                var anchor = 0
-                                detectDragGesturesAfterLongPress(
-                                    onDragStart = { position ->
-                                        val result = layoutRef.value
-                                            ?: return@detectDragGesturesAfterLongPress
-                                        anchor = result.getOffsetForPosition(position)
-                                        selection = Span(
-                                            paragraph.index, anchor, paragraph.index, anchor)
-                                    },
-                                    onDrag = { change, _ ->
-                                        // Compose keeps delivering to the node
-                                        // that took the press, so once the
-                                        // finger leaves this paragraph the
-                                        // position is simply out of its bounds.
-                                        // Lift it into root space and ask which
-                                        // paragraph is actually under there.
-                                        val mine = placed[paragraph.index]?.bounds
-                                            ?: return@detectDragGesturesAfterLongPress
-                                        val root = mine.topLeft + change.position
-                                        val at = offsetAt(placed, root)
-                                            ?: return@detectDragGesturesAfterLongPress
-                                        selection = Span(
-                                            paragraph.index, anchor, at.first, at.second)
-                                    },
-                                    // Lifting without moving arrives here, not
-                                    // at onDragEnd — so a plain long press is
-                                    // a cancelled drag of length zero, and
-                                    // still means "mark this word".
-                                    onDragCancel = {
-                                        val span = selection
-                                        selection = null
-                                        if (span != null && span.isPoint) {
-                                            say(context, viewModel.toggleBookmarkAt(
-                                                paragraph.index, anchor))
-                                        }
-                                    },
-                                    onDragEnd = {
-                                        val span = selection
-                                        selection = null
-                                        say(context, if (span == null || span.isPoint)
-                                            viewModel.toggleBookmarkAt(paragraph.index, anchor)
-                                        else viewModel.bookmarkSpan(
-                                            span.fromParagraph, span.fromOffset,
-                                            span.toParagraph, span.toOffset + 1))
-                                    },
-                                )
+                                // A long press opens a selection on the word
+                                // under the finger and hands over to the
+                                // handles. It no longer writes anything by
+                                // itself: creating and removing a bookmark are
+                                // both deliberate now, behind Save.
+                                detectTapGestures(onLongPress = { position ->
+                                    val result = layoutRef.value
+                                        ?: return@detectTapGestures
+                                    val at = result.getOffsetForPosition(position)
+                                    val word = viewModel.wordSpanAt(paragraph.index, at)
+                                    selection = if (word == null) null else Span(
+                                        paragraph.index, word.first,
+                                        paragraph.index, word.last + 1,
+                                    )
+                                })
                             }
                             .padding(horizontal = 6.dp, vertical = 3.dp),
                     )
                 }
             }
+
+            // The two ends, drawn over the page. A handle whose paragraph has
+            // scrolled away is simply not drawn — the selection is still there,
+            // and scrolling back brings the handle back with it.
+            selection?.let { span ->
+                // The geometry map is written during layout and observes
+                // nothing, so a handle would sit where it was first drawn while
+                // the page slid out from under it. Reading the scroll position
+                // here is what makes the handles ride the text.
+                val riding = listState.firstVisibleItemIndex to
+                    listState.firstVisibleItemScrollOffset
+                Handle(span, end = false, placed = placed, page = pageBounds,
+                       riding = riding) { p, o ->
+                    selection = span.copy(fromParagraph = p, fromOffset = o)
+                }
+                Handle(span, end = true, placed = placed, page = pageBounds,
+                       riding = riding) { p, o ->
+                    selection = span.copy(toParagraph = p, toOffset = o)
+                }
+            }
+            }
+        }
+        }
+
+        // Last child of the column, so it is pinned under the page rather than
+        // floating over the text it is asking you about.
+        selection?.let { span ->
+            val range = viewModel.globalRange(
+                span.fromParagraph, span.fromOffset, span.toParagraph, span.toOffset)
+            SelectionBar(
+                length = range?.let { it.last - it.first + 1 } ?: 0,
+                existing = range?.let { viewModel.markUnder(it) } != null,
+                onCancel = { selection = null },
+                onSave = {
+                    say(context, viewModel.bookmarkSpan(
+                        span.fromParagraph, span.fromOffset,
+                        span.toParagraph, span.toOffset))
+                    selection = null
+                },
+            )
         }
     }
 }
@@ -952,4 +984,121 @@ private fun offsetAt(placed: Map<Int, Placed>, point: Offset): Pair<Int, Int>? {
 
     val local = point - entry.value.bounds!!.topLeft
     return entry.key to entry.value.layout!!.getOffsetForPosition(local)
+}
+
+/**
+ * One end of a selection, draggable.
+ *
+ * Its position comes from the text layout, so it sits on the character rather
+ * than near it, and it moves with the page as you scroll. Off-screen ends are
+ * not drawn: the selection survives, the handle comes back with the paragraph.
+ */
+@Composable
+private fun Handle(
+    span: Span,
+    end: Boolean,
+    placed: Map<Int, Placed>,
+    page: Rect,
+    /** Read, not used: the scroll position this handle must be redrawn for. */
+    riding: Pair<Int, Int>,
+    onMove: (Int, Int) -> Unit,
+) {
+    @Suppress("UNUSED_EXPRESSION") riding
+    val paragraph = if (end) span.toParagraph else span.fromParagraph
+    val offset = if (end) span.toOffset else span.fromOffset
+    val at = placed[paragraph]?.takeIf { it.usable } ?: return
+    val layout = at.layout!!
+    val bounds = at.bounds!!
+
+    val cursor = runCatching {
+        layout.getCursorRect(offset.coerceIn(0, layout.layoutInput.text.length))
+    }.getOrNull() ?: return
+
+    // Root space, then into the page's own space, because that is what the
+    // overlay is measured in.
+    val x = bounds.left + cursor.left - page.left
+    val y = bounds.top + cursor.bottom - page.top
+    if (y < -SIZE_PX || y > page.height + SIZE_PX) return
+
+    val density = LocalDensity.current
+    Box(
+        Modifier
+            .offset {
+                // The trailing handle hangs to the right of its character, the
+                // leading one to the left, the way a text field does it.
+                val dx = if (end) 0f else -with(density) { SIZE.toPx() }
+                IntOffset((x + dx).toInt(), y.toInt())
+            }
+            .size(SIZE)
+            .testTag(if (end) "handle_end" else "handle_start")
+            .pointerInput(paragraph, end) {
+                detectDragGestures { change, _ ->
+                    // The finger is on the handle, but the character we want is
+                    // where the handle points, a little above it.
+                    val root = Offset(
+                        page.left + x + change.position.x,
+                        page.top + y + change.position.y - with(density) { SIZE.toPx() },
+                    )
+                    offsetAt(placed, root)?.let { (p, o) -> onMove(p, o) }
+                }
+            }
+            .clip(CircleShape)
+            .background(Palette.accent),
+    )
+}
+
+private val SIZE = 20.dp
+private const val SIZE_PX = 80f
+
+/**
+ * What a selection will do, and the two ways out of it.
+ *
+ * Save reads Remove when the selection sits on a mark already, so deleting a
+ * bookmark is a labelled act rather than the invisible other half of a toggle.
+ */
+@Composable
+private fun SelectionBar(
+    length: Int,
+    existing: Boolean,
+    onCancel: () -> Unit,
+    onSave: () -> Unit,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .background(Palette.panel)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            if (length > 0) "$length characters" else "Nothing selected",
+            color = Palette.textDim,
+            fontSize = 11.5.sp,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            "Cancel",
+            color = Palette.textDim,
+            fontSize = 12.5.sp,
+            modifier = Modifier
+                .testTag("selection_cancel")
+                .clip(RoundedCornerShape(7.dp))
+                .background(Palette.panel2)
+                .clickableNoRipple(onCancel)
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+        )
+        Box(Modifier.size(10.dp))
+        Text(
+            if (existing) "Remove" else "Save",
+            color = if (existing) Palette.danger else Palette.accent,
+            fontSize = 12.5.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier
+                .testTag("selection_save")
+                .clip(RoundedCornerShape(7.dp))
+                .background(Palette.bookmark)
+                .clickableNoRipple(onSave)
+                .padding(horizontal = 18.dp, vertical = 8.dp),
+        )
+    }
 }
