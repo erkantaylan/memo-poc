@@ -1,6 +1,8 @@
 package com.erkantaylan.kitaplik.ui
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -15,7 +17,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -28,6 +34,7 @@ import com.erkantaylan.kitaplik.ui.theme.Palette
  * Both lists stay empty until the reader exists to record a position — an
  * honest empty state rather than invented rows.
  */
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun HomeScreen(
     inProgress: List<com.erkantaylan.kitaplik.reader.BookProgress>,
@@ -42,6 +49,10 @@ fun HomeScreen(
         Modifier
             .fillMaxSize()
             .background(Palette.bg)
+            // Without this the rows carry no resource id, so nothing on Home
+            // can be addressed by `kctl` — the one screen the tooling was
+            // blind to.
+            .semantics { testTagsAsResourceId = true }
     ) {
       item {
         ScreenTitle("KİTAPLIK")
@@ -101,11 +112,13 @@ fun HomeScreen(
 }
 
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 private fun BookmarkRow(
     mark: com.erkantaylan.kitaplik.reader.Bookmark,
     onOpen: (com.erkantaylan.kitaplik.reader.Bookmark) -> Unit,
     onRemove: (String) -> Unit,
 ) {
+    val context = LocalContext.current
     Column(
         Modifier
             .fillMaxWidth()
@@ -115,7 +128,19 @@ private fun BookmarkRow(
             .background(Palette.panel)
             .border(1.dp, Palette.border, RoundedCornerShape(10.dp))
             .testTagged("bookmark:${mark.id}")
-            .clickableNoRipple { onOpen(mark) }
+            // Long press removes, the same gesture that created the mark in
+            // the reader. Until now nothing called onRemove at all, so the
+            // only way to undo an accidental bookmark was to find the word
+            // again and press it a second time.
+            .combinedClickable(
+                onClick = { onOpen(mark) },
+                onLongClick = {
+                    onRemove(mark.id)
+                    android.widget.Toast.makeText(
+                        context, "Bookmark removed", android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                },
+            )
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(5.dp),
     ) {

@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
@@ -132,11 +133,22 @@ class MainActivity : ComponentActivity() {
                             Tab.HOME -> {
                                 // Re-read on every visit so returning from the
                                 // reader shows the position just recorded.
-                                val catalogItems = vm.state.value.catalog?.items.orEmpty()
+                                // Collected, not read once: the catalog arrives
+                                // from Drive after Home has already composed,
+                                // and a plain .value read leaves this list empty
+                                // for ever — so every row on Home silently did
+                                // nothing until you had visited Cloud.
+                                val catalogState by vm.state.collectAsStateWithLifecycle()
+                                val catalogItems = catalogState.catalog?.items.orEmpty()
+                                // The stores are plain files, not flows, so a
+                                // removal has to say it happened or the row
+                                // stays on screen until you leave the tab.
+                                var revision by remember { mutableStateOf(0) }
+                                val marks = remember(revision) { bookmarks.recent() }
                                 HomeScreen(
                                     inProgress = progress.inProgress(),
                                     recent = progress.recent(),
-                                    bookmarks = bookmarks.recent(),
+                                    bookmarks = marks,
                                     onOpen = { id ->
                                         catalogItems.firstOrNull { it.id == id }
                                             ?.let { reading = it to null }
@@ -145,7 +157,7 @@ class MainActivity : ComponentActivity() {
                                         catalogItems.firstOrNull { it.id == mark.itemId }
                                             ?.let { reading = it to mark.charOffset }
                                     },
-                                    onRemoveBookmark = { bookmarks.remove(it) },
+                                    onRemoveBookmark = { bookmarks.remove(it); revision++ },
                                     onBrowse = { tab = Tab.CLOUD },
                                 )
                             }
