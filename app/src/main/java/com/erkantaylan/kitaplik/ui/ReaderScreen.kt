@@ -45,9 +45,6 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.layout.heightIn
 import com.erkantaylan.kitaplik.reader.BionicStrength
 import com.erkantaylan.kitaplik.reader.ReaderFont
 import com.erkantaylan.kitaplik.reader.ReaderStyle
@@ -338,18 +335,18 @@ private fun ReaderBar(
         Modifier
             .fillMaxWidth()
             .background(Palette.panel)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
+            .padding(horizontal = 12.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
             "‹",
             color = Palette.accent,
-            fontSize = 26.sp,
+            fontSize = 24.sp,
             fontWeight = FontWeight.Bold,
             modifier = Modifier
                 .testTag("reader_back")
                 .clickableNoRipple(onBack)
-                .padding(horizontal = 10.dp),
+                .padding(horizontal = 10.dp, vertical = 2.dp),
         )
         Column(
             Modifier
@@ -360,7 +357,8 @@ private fun ReaderBar(
                 // scroll through the pages has polluted it.
                 .combinedClickable(onClick = {}, onLongClick = onResetSpeed),
         ) {
-            Text(title, color = Palette.text, fontSize = 14.sp, maxLines = 1)
+            Text(title, color = Palette.text, fontSize = 13.sp, maxLines = 1,
+                 lineHeight = 15.sp)
             val line = buildList {
                 if (author.isNotBlank()) add(author)
                 if (wpm > 0) add(if (wpmProvisional) "~$wpm wpm" else "$wpm wpm")
@@ -370,7 +368,8 @@ private fun ReaderBar(
                 Text(
                     line,
                     color = if (wpm > 0) Palette.accent else Palette.textDim,
-                    fontSize = 11.5.sp,
+                    fontSize = 10.5.sp,
+                    lineHeight = 12.sp,
                     maxLines = 1,
                 )
             }
@@ -380,23 +379,29 @@ private fun ReaderBar(
             color = if (bookmarkCount > 0) Palette.accent else Palette.textDim,
             fontSize = 15.sp,
             modifier = Modifier.testTag("bookmarks")
-                .clickableNoRipple(onBookmarks).padding(8.dp),
+                .clickableNoRipple(onBookmarks)
+                .padding(horizontal = 8.dp, vertical = 4.dp),
         )
         Text("\u2261", color = Palette.textDim, fontSize = 19.sp,
              modifier = Modifier.testTag("reading_panel")
-                 .clickableNoRipple(onPanel).padding(horizontal = 10.dp, vertical = 4.dp))
+                 .clickableNoRipple(onPanel).padding(horizontal = 10.dp, vertical = 2.dp))
     }
 }
 
 
 
+/** The panel's panes. Three, so none of them needs to scroll. */
+private enum class PanelTab(val label: String) {
+    READING("Reading"), TEXT("Text"), SPACING("Spacing")
+}
+
 /**
  * The reading panel: how the page is set, tuned while you are looking at it.
  *
- * It sits under the bar rather than in a sheet, and is capped at 60% of the
- * height with its own scroll, so prose stays on screen underneath. Every
- * control here changes the look of that prose, and watching it change is the
- * whole point — a panel that covers the text makes you guess.
+ * Split into panes rather than one long list. A panel tall enough to need
+ * scrolling covers the prose it is changing, which defeats the reason it sits
+ * over the text instead of in Settings — three short panes keep most of the
+ * page visible while you drag a slider.
  */
 @Composable
 private fun ReadingPanel(
@@ -408,90 +413,97 @@ private fun ReadingPanel(
     onStyle: (ReaderStyle) -> Unit,
     onReset: () -> Unit,
 ) {
-    val scroll = rememberScrollState()
+    var pane by androidx.compose.runtime.remember {
+        androidx.compose.runtime.mutableStateOf(PanelTab.READING)
+    }
+
     Column(
         Modifier
             .fillMaxWidth()
-            .heightIn(max = 460.dp)
             .background(Palette.panel)
-            .verticalScroll(scroll)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("Bionic reading", color = Palette.text, fontSize = 13.5.sp)
-                Text("Weight the front of each word",
-                     color = Palette.textDim, fontSize = 11.sp)
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            PanelTab.entries.forEach { tab ->
+                Chip("pane:${tab.name.lowercase()}", tab.label, tab == pane) { pane = tab }
             }
-            Chip("bionic_toggle", if (bionic) "ON" else "OFF", bionic) { onBionic(!bionic) }
+            Box(Modifier.weight(1f))
+            Text(
+                "Reset",
+                color = Palette.textDim,
+                fontSize = 11.5.sp,
+                modifier = Modifier
+                    .testTag("reset_style")
+                    .clickableNoRipple(onReset)
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+            )
         }
 
-        // Strength only means anything while bionic is on, so it travels with it
-        // rather than sitting live above an off switch.
-        if (bionic) {
-            ChipRow("Strength") {
-                BionicStrength.entries.forEach { option ->
-                    Chip("strength:${option.name.lowercase()}", option.label,
-                         option == strength) { onStrength(option) }
+        when (pane) {
+            PanelTab.READING -> {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Bionic reading", color = Palette.text, fontSize = 13.sp)
+                        Text("Weight the front of each word",
+                             color = Palette.textDim, fontSize = 10.5.sp)
+                    }
+                    Chip("bionic_toggle", if (bionic) "ON" else "OFF", bionic) {
+                        onBionic(!bionic)
+                    }
+                }
+                // Strength only means anything while bionic is on, so it travels
+                // with it rather than sitting live above an off switch.
+                if (bionic) ChipRow("Strength") {
+                    BionicStrength.entries.forEach { option ->
+                        Chip("strength:${option.name.lowercase()}", option.label,
+                             option == strength) { onStrength(option) }
+                    }
                 }
             }
-        }
 
-        Divider()
-
-        ChipRow("Font") {
-            ReaderFont.entries.forEach { font ->
-                Chip("font:${font.name.lowercase()}", font.label, font == style.font) {
-                    onStyle(style.copy(font = font))
+            PanelTab.TEXT -> {
+                ChipRow("Font") {
+                    ReaderFont.entries.forEach { font ->
+                        Chip("font:${font.name.lowercase()}", font.label,
+                             font == style.font) { onStyle(style.copy(font = font)) }
+                    }
+                }
+                Setting("Size", "${style.size.toInt()}", style.size,
+                        ReaderStyle.SIZE, "size") { onStyle(style.copy(size = it)) }
+                Setting("Line height", String.format("%.2f", style.lineHeight),
+                        style.lineHeight, ReaderStyle.LINE_HEIGHT, "line_height") {
+                    onStyle(style.copy(lineHeight = it))
                 }
             }
-        }
 
-        Setting("Size", "${style.size.toInt()}", style.size, ReaderStyle.SIZE, "size") {
-            onStyle(style.copy(size = it))
+            PanelTab.SPACING -> {
+                Setting("Letter", String.format("%.2f", style.letterSpacing),
+                        style.letterSpacing, ReaderStyle.LETTER_SPACING, "letter_spacing") {
+                    onStyle(style.copy(letterSpacing = it))
+                }
+                Setting("Word", String.format("%.2f", style.wordSpacing),
+                        style.wordSpacing, ReaderStyle.WORD_SPACING, "word_spacing") {
+                    onStyle(style.copy(wordSpacing = it))
+                }
+                Setting("Margin", "${style.margin.toInt()}", style.margin,
+                        ReaderStyle.MARGIN, "margin") { onStyle(style.copy(margin = it)) }
+            }
         }
-        Setting("Line height", String.format("%.2f", style.lineHeight),
-                style.lineHeight, ReaderStyle.LINE_HEIGHT, "line_height") {
-            onStyle(style.copy(lineHeight = it))
-        }
-        Setting("Letter spacing", String.format("%.2f", style.letterSpacing),
-                style.letterSpacing, ReaderStyle.LETTER_SPACING, "letter_spacing") {
-            onStyle(style.copy(letterSpacing = it))
-        }
-        Setting("Word spacing", String.format("%.2f", style.wordSpacing),
-                style.wordSpacing, ReaderStyle.WORD_SPACING, "word_spacing") {
-            onStyle(style.copy(wordSpacing = it))
-        }
-        Setting("Margin", "${style.margin.toInt()}", style.margin, ReaderStyle.MARGIN, "margin") {
-            onStyle(style.copy(margin = it))
-        }
-
-        Text(
-            "Reset to defaults",
-            color = Palette.textDim,
-            fontSize = 12.sp,
-            modifier = Modifier
-                .testTag("reset_style")
-                .clickableNoRipple(onReset)
-                .padding(vertical = 6.dp),
-        )
     }
-}
-
-@Composable
-private fun Divider() {
-    Box(Modifier.fillMaxWidth().height(1.dp).background(Palette.border))
 }
 
 @Composable
 private fun ChipRow(label: String, chips: @Composable () -> Unit) {
     Row(
         Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(label, color = Palette.textDim, fontSize = 12.sp, modifier = Modifier.weight(1f))
+        Text(label, color = Palette.textDim, fontSize = 11.5.sp, modifier = Modifier.weight(1f))
         chips()
     }
 }
@@ -501,18 +513,18 @@ private fun Chip(tag: String, label: String, active: Boolean, onClick: () -> Uni
     Text(
         label,
         color = if (active) Palette.accent else Palette.textDim,
-        fontSize = 12.sp,
+        fontSize = 11.5.sp,
         fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
         modifier = Modifier
             .testTag(tag)
             .clip(RoundedCornerShape(6.dp))
             .background(if (active) Palette.bookmark else Palette.panel2)
             .clickableNoRipple(onClick)
-            .padding(horizontal = 12.dp, vertical = 7.dp),
+            .padding(horizontal = 11.dp, vertical = 5.dp),
     )
 }
 
-/** Label and current value on one line, the slider under it. */
+/** Label and value on one line, the slider tucked under it. */
 @Composable
 private fun Setting(
     label: String,
@@ -524,15 +536,16 @@ private fun Setting(
 ) {
     Column(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth()) {
-            Text(label, color = Palette.textDim, fontSize = 12.sp, modifier = Modifier.weight(1f))
-            Text(value, color = Palette.text, fontSize = 12.sp,
+            Text(label, color = Palette.textDim, fontSize = 11.5.sp,
+                 modifier = Modifier.weight(1f))
+            Text(value, color = Palette.text, fontSize = 11.5.sp,
                  fontFamily = FontFamily.Monospace)
         }
         Slider(
             value = current,
             onValueChange = onChange,
             valueRange = range,
-            modifier = Modifier.fillMaxWidth().height(28.dp).testTag("slider:$tag"),
+            modifier = Modifier.fillMaxWidth().height(22.dp).testTag("slider:$tag"),
             colors = SliderDefaults.colors(
                 thumbColor = Palette.accent,
                 activeTrackColor = Palette.accent,
