@@ -47,6 +47,12 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import com.erkantaylan.kitaplik.reader.BionicStrength
 import com.erkantaylan.kitaplik.reader.ReaderFont
 import com.erkantaylan.kitaplik.reader.ReaderStyle
@@ -119,6 +125,13 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
         }
     }
 
+    // Walking the hits scrolls the list; the paragraph is all we need, since a
+    // match is always inside one.
+    LaunchedEffect(state.matchIndex, state.matches) {
+        val hit = state.matches.getOrNull(state.matchIndex) ?: return@LaunchedEffect
+        listState.scrollToItem(hit.paragraph)
+    }
+
     // Record where we are whenever the top visible paragraph changes.
     LaunchedEffect(listState, state.loading) {
         if (state.loading) return@LaunchedEffect
@@ -162,8 +175,23 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
             },
             onBack = onBack,
             onBookmarks = { viewModel.setBookmarksVisible(!state.showBookmarks) },
+            onSearch = { viewModel.setSearchOpen(!state.searchOpen) },
             onPanel = { viewModel.setPanelVisible(!state.showPanel) },
         )
+
+        if (state.searchOpen) {
+            // Back leaves the search before it leaves the book. Nested below
+            // MainActivity's handler, so this one runs first.
+            BackHandler { viewModel.setSearchOpen(false) }
+            SearchBar(
+                query = state.query,
+                matches = state.matches.size,
+                at = state.matchIndex,
+                onQuery = viewModel::onQueryChange,
+                onStep = viewModel::stepMatch,
+                onClose = { viewModel.setSearchOpen(false) },
+            )
+        }
 
         if (state.showPanel) {
             ReadingPanel(
@@ -215,10 +243,14 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
 
                     // Highlight each marked word rather than the whole block.
                     val wordSpacing = state.style.wordSpacing
+                    val hits = state.matches.filter { it.paragraph == paragraph.index }
+                    val here = state.matches.getOrNull(state.matchIndex)
                     val rendered = androidx.compose.runtime.remember(
                         paragraph.text, marks, state.bionic, state.bionicStrength, wordSpacing,
+                        hits, here,
                     ) {
-                        if (marks.isEmpty() && !state.bionic && wordSpacing == 0f) {
+                        if (marks.isEmpty() && !state.bionic && wordSpacing == 0f &&
+                            hits.isEmpty()) {
                             androidx.compose.ui.text.AnnotatedString(paragraph.text)
                         } else {
                             androidx.compose.ui.text.buildAnnotatedString {
@@ -267,6 +299,20 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                                             color = Palette.text,
                                         ),
                                         from, to,
+                                    )
+                                }
+                                // Hits last, so the one you are standing on
+                                // wins over a bookmark sitting on the same word.
+                                hits.forEach { hit ->
+                                    addStyle(
+                                        androidx.compose.ui.text.SpanStyle(
+                                            background = if (hit == here) Palette.accent
+                                                         else Palette.bookmark,
+                                            color = if (hit == here) Palette.bg
+                                                    else Palette.text,
+                                        ),
+                                        hit.start.coerceIn(0, paragraph.text.length),
+                                        hit.end.coerceIn(0, paragraph.text.length),
                                     )
                                 }
                             }
@@ -336,6 +382,7 @@ private fun ReaderBar(
     onResetSpeed: () -> Unit,
     onBack: () -> Unit,
     onBookmarks: () -> Unit,
+    onSearch: () -> Unit,
     onPanel: () -> Unit,
 ) {
     Row(
@@ -389,6 +436,9 @@ private fun ReaderBar(
                 .clickableNoRipple(onBookmarks)
                 .padding(horizontal = 8.dp, vertical = 4.dp),
         )
+        Text("\u2315", color = Palette.textDim, fontSize = 17.sp,
+             modifier = Modifier.testTag("reader_search")
+                 .clickableNoRipple(onSearch).padding(horizontal = 8.dp, vertical = 2.dp))
         Text("\u2261", color = Palette.textDim, fontSize = 19.sp,
              modifier = Modifier.testTag("reading_panel")
                  .clickableNoRipple(onPanel).padding(horizontal = 10.dp, vertical = 2.dp))
@@ -600,5 +650,88 @@ private fun Setting(
              fontFamily = FontFamily.Monospace,
              textAlign = TextAlign.End,
              modifier = Modifier.width(44.dp).padding(start = 8.dp))
+    }
+}
+
+/**
+ * Find in book: a field, a position, and the two arrows that walk the hits.
+ *
+ * It replaces nothing — the prose stays where it is, and stepping to a hit
+ * scrolls the same list you were already reading, so closing the search leaves
+ * you wherever the last hit put you rather than somewhere you never saw.
+ */
+@Composable
+private fun SearchBar(
+    query: String,
+    matches: Int,
+    at: Int,
+    onQuery: (String) -> Unit,
+    onStep: (Int) -> Unit,
+    onClose: () -> Unit,
+) {
+    val focus = androidx.compose.runtime.remember { FocusRequester() }
+    androidx.compose.runtime.LaunchedEffect(Unit) { focus.requestFocus() }
+
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .background(Palette.panel)
+            .padding(horizontal = 14.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Box(
+            Modifier
+                .weight(1f)
+                .clip(RoundedCornerShape(7.dp))
+                .background(Palette.panel2)
+                .padding(horizontal = 10.dp, vertical = 7.dp),
+        ) {
+            if (query.isEmpty()) {
+                Text("Find in book", color = Palette.textDim, fontSize = 12.5.sp)
+            }
+            BasicTextField(
+                value = query,
+                onValueChange = onQuery,
+                singleLine = true,
+                textStyle = TextStyle(color = Palette.text, fontSize = 12.5.sp),
+                cursorBrush = SolidColor(Palette.accent),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("search_in_book")
+                    .focusRequester(focus),
+            )
+        }
+
+        // The count is the useful part of a search, so it is never hidden:
+        // nothing found reads as "none", not as an empty space.
+        Text(
+            when {
+                query.trim().length < com.erkantaylan.kitaplik.reader.MIN_QUERY -> ""
+                matches == 0 -> "none"
+                matches >= com.erkantaylan.kitaplik.reader.SEARCH_LIMIT ->
+                    "${at + 1}/$matches+"
+                else -> "${at + 1}/$matches"
+            },
+            color = if (matches == 0 && query.trim().length >= 2) Palette.danger
+                    else Palette.textDim,
+            fontSize = 11.sp,
+            fontFamily = FontFamily.Monospace,
+            modifier = Modifier.padding(horizontal = 6.dp),
+        )
+
+        Text("‹", color = if (matches > 0) Palette.accent else Palette.textDim,
+             fontSize = 22.sp, fontWeight = FontWeight.Bold,
+             modifier = Modifier.testTag("search_prev")
+                 .clickableNoRipple { if (matches > 0) onStep(-1) }
+                 .padding(horizontal = 10.dp))
+        Text("›", color = if (matches > 0) Palette.accent else Palette.textDim,
+             fontSize = 22.sp, fontWeight = FontWeight.Bold,
+             modifier = Modifier.testTag("search_next")
+                 .clickableNoRipple { if (matches > 0) onStep(1) }
+                 .padding(horizontal = 10.dp))
+        Text("×", color = Palette.textDim, fontSize = 20.sp,
+             modifier = Modifier.testTag("search_close")
+                 .clickableNoRipple(onClose).padding(start = 6.dp))
     }
 }

@@ -10,7 +10,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 
 /** How far a long press may reach for a word before giving up. */
@@ -37,6 +40,11 @@ data class ReaderUiState(
     val style: ReaderStyle = ReaderStyle.DEFAULT,
     /** The reading panel: bionic, strength and text size, over the text. */
     val showPanel: Boolean = false,
+    val searchOpen: Boolean = false,
+    val query: String = "",
+    val matches: List<Match> = emptyList(),
+    /** Which hit you are standing on, -1 before you step to one. */
+    val matchIndex: Int = -1,
     val markedParagraphs: Set<Int> = emptySet(),
     val bookmarks: List<Bookmark> = emptyList(),
     val showBookmarks: Boolean = false,
@@ -63,6 +71,7 @@ class ReaderViewModel(
     val state: StateFlow<ReaderUiState> = _state.asStateFlow()
 
     private var tracker: SpeedTracker? = null
+    private var searchJob: kotlinx.coroutines.Job? = null
     private var lastOffset = 0
 
     val title: String = item.title
@@ -275,6 +284,47 @@ class ReaderViewModel(
         _state.update {
             it.copy(wpm = wpm, wpmProvisional = provisional, minutesLeft = minutes)
         }
+    }
+
+    fun setSearchOpen(open: Boolean) = _state.update {
+        // Closing clears the query, so reopening does not resume someone
+        // else's search from an hour ago.
+        if (open) it.copy(searchOpen = true, showPanel = false)
+        else it.copy(searchOpen = false, query = "", matches = emptyList(), matchIndex = -1)
+    }
+
+    fun onQueryChange(query: String) {
+        searchJob?.cancel()
+        if (query.trim().length < MIN_QUERY) {
+            _state.update { it.copy(query = query, matches = emptyList(), matchIndex = -1) }
+            return
+        }
+        _state.update { it.copy(query = query) }
+        searchJob = viewModelScope.launch {
+            // Typing is faster than scanning a 700,000 character book, and
+            // every keystroke would otherwise start a scan the next one
+            // throws away.
+            delay(180)
+            val book = _state.value.book
+            val hits = withContext(Dispatchers.Default) { search(book, query) }
+            _state.update {
+                if (it.query != query) it
+                // Land on the first hit at or after where you are reading,
+                // because you are looking for the next one, not the first in
+                // the book.
+                else it.copy(matches = hits, matchIndex = if (hits.isEmpty()) -1 else
+                    hits.indexOfFirst { m -> m.paragraph >= it.startParagraph }
+                        .takeIf { at -> at >= 0 } ?: 0)
+            }
+        }
+    }
+
+    fun stepMatch(delta: Int) = _state.update {
+        if (it.matches.isEmpty()) it
+        else it.copy(
+            matchIndex = ((it.matchIndex + delta) % it.matches.size + it.matches.size)
+                % it.matches.size
+        )
     }
 
     fun setPanelVisible(visible: Boolean) =
